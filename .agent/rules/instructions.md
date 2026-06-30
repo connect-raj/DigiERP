@@ -46,7 +46,7 @@ Example:
 ```ts
 return successResponse(data);
 
-throw new NotFoundError("User not found");
+throw new NotFoundError('User not found');
 ```
 
 ---
