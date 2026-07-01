@@ -146,6 +146,8 @@ Business logic must never exist inside React components or route handlers.
 - Use Suspense where appropriate.
 - Keep layouts reusable.
 - Avoid unnecessary middleware logic.
+- Do not write pages directly inside `app/page.tsx`. Instead, pages should be defined under their respective feature/module directory (e.g. a login feature directory) and imported into the `page.tsx` routing file.
+- Strict adherence to Next.js folder-based routing structure is required for all pages and APIs.
 
 ---
 

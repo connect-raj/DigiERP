@@ -19,13 +19,13 @@ export default defineConfig({
         'vitest.setup.ts',
         'tailwind.config.ts',
         'next.config.ts',
-        'src/components/ui/**',
+        'components/ui/**',
       ],
     },
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(__dirname, './'),
     },
   },
 });
