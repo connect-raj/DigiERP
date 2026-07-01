@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 export class AppError extends Error {
   constructor(
     public statusCode: number,
-    message: string
+    message: string,
+    public code: string = 'INTERNAL_ERROR'
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -12,35 +13,41 @@ export class AppError extends Error {
 }
 
 export class BadRequestError extends AppError {
-  constructor(message = 'Bad Request') {
-    super(400, message);
+  constructor(message = 'Bad Request', code = 'BAD_REQUEST') {
+    super(400, message, code);
   }
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message = 'Unauthorized') {
-    super(401, message);
+  constructor(message = 'Unauthorized', code = 'UNAUTHORIZED') {
+    super(401, message, code);
   }
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message = 'Forbidden') {
-    super(403, message);
+  constructor(message = 'Forbidden', code = 'FORBIDDEN') {
+    super(403, message, code);
   }
 }
 
 export class NotFoundError extends AppError {
-  constructor(message = 'Not Found') {
-    super(404, message);
+  constructor(message = 'Not Found', code = 'NOT_FOUND') {
+    super(404, message, code);
   }
 }
 
 export class InternalServerError extends AppError {
-  constructor(message = 'Internal Server Error') {
-    super(500, message);
+  constructor(message = 'Internal Server Error', code = 'INTERNAL_ERROR') {
+    super(500, message, code);
   }
 }
 
-export function successResponse<T>(data: T, status = 200) {
+export class ConflictError extends AppError {
+  constructor(message = 'Conflict', code = 'CONFLICT') {
+    super(409, message, code);
+  }
+}
+
+export function successResponse<T>(data: T, status = 200): NextResponse {
   return NextResponse.json({ success: true, data }, { status });
 }
