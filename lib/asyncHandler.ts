@@ -15,14 +15,9 @@ export function asyncHandler<T extends unknown[]>(handler: RouteHandler<T>) {
 
       const statusCode = error instanceof AppError ? error.statusCode : 500;
       const message = error instanceof Error ? error.message : 'Internal Server Error';
+      const code = error instanceof AppError ? error.code : 'INTERNAL_ERROR';
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: message,
-        },
-        { status: statusCode }
-      );
+      return NextResponse.json({ error: { code, message } }, { status: statusCode });
     }
   };
 }
