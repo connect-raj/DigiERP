@@ -49,8 +49,9 @@ export class VendorRepository {
     return prisma.vendor.update({ where: { id }, data: { isActive: false } });
   }
 
-  async hasPurchases(_id: string): Promise<boolean> {
+  async hasPurchases(id: string): Promise<boolean> {
     // No Purchase model yet — always false
+    void id;
     return false;
   }
 

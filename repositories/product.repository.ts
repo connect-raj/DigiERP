@@ -51,8 +51,9 @@ export class ProductRepository {
     return prisma.product.update({ where: { id }, data: { isActive: false } });
   }
 
-  async hasOpenChallans(_id: string): Promise<boolean> {
+  async hasOpenChallans(id: string): Promise<boolean> {
     // No Challan model yet — always false
+    void id;
     return false;
   }
 
