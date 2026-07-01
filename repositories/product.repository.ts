@@ -84,7 +84,7 @@ export class ProductRepository {
   }
 
   async adjustStock(id: string, quantity: number, reason: string, performedById?: string) {
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const product = await tx.product.findUniqueOrThrow({ where: { id } });
 
       const stockBefore = new Decimal(product.currentStock.toString());

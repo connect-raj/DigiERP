@@ -59,7 +59,7 @@ export class VendorRepository {
     vendorId: string,
     products: Array<{ productId: string; isPreferred?: boolean }>
   ): Promise<number> {
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const preferredProducts = products.filter((p) => p.isPreferred === true);
 
       // If any of the incoming products are preferred, clear existing preferred flag for this vendor
