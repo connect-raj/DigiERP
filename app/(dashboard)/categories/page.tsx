@@ -17,6 +17,13 @@ export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    hsnCode: '',
+    gstRate: '18',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchCategories = async () => {
     try {
@@ -30,6 +37,38 @@ export default function CategoriesPage() {
       console.error('Failed to fetch categories', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          hsnCode: formData.hsnCode,
+          gstRate: Number(formData.gstRate),
+        }),
+      });
+      
+      if (res.ok) {
+        setIsModalOpen(false);
+        setFormData({ name: '', hsnCode: '', gstRate: '18' });
+        fetchCategories();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Failed to create category', error);
+      alert('Failed to create category');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -121,29 +160,49 @@ export default function CategoriesPage() {
               <h3 className="font-headline-md text-headline-md text-primary">Add New Category</h3>
               <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
             </div>
-            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+            <form className="space-y-4" onSubmit={handleCreateCategory}>
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Category Name</label>
-                <input className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" placeholder="e.g. UV Curable Inks" type="text" />
+                <input 
+                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                  placeholder="e.g. UV Curable Inks" 
+                  type="text" 
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">HSN Code</label>
-                  <input className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" placeholder="8 digits" type="text" />
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="8 digits" 
+                    type="text" 
+                    value={formData.hsnCode}
+                    onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+                    required
+                  />
                 </div>
                 <div>
                   <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">GST Rate (%)</label>
-                  <select className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none">
+                  <select 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                    value={formData.gstRate}
+                    onChange={(e) => setFormData({ ...formData, gstRate: e.target.value })}
+                  >
                     <option value="5">5%</option>
                     <option value="12">12%</option>
-                    <option value="18" selected>18%</option>
+                    <option value="18">18%</option>
                     <option value="28">28%</option>
                   </select>
                 </div>
               </div>
               <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
-                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button">Cancel</button>
-                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all" type="submit">Create</button>
+                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
+                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Creating...' : 'Create'}
+                </button>
               </div>
             </form>
           </div>
