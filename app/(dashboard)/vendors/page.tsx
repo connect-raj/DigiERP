@@ -5,19 +5,35 @@ import React, { useState, useEffect } from 'react';
 type Vendor = {
   id: string;
   name: string;
-  contactPerson: string | null;
+  contactPerson?: string | null;
   email: string | null;
   phone: string | null;
+  address?: string;
+  state?: string;
   gstin: string | null;
-  rating: number;
+  rating?: number;
   isActive: boolean;
-  paymentTerms: number;
+  paymentTerms?: string | number | null;
 };
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    state: '',
+    email: '',
+    gstin: '',
+    paymentTerms: '30',
+    isActive: true,
+  });
 
   const fetchVendors = async () => {
     try {
@@ -32,6 +48,93 @@ export default function VendorsPage() {
     } catch (error) {
       console.error('Failed to fetch vendors', error);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const openEditModal = (vendor: Vendor) => {
+    setFormData({
+      name: vendor.name,
+      phone: vendor.phone || '',
+      address: vendor.address || '',
+      state: vendor.state || '',
+      email: vendor.email || '',
+      gstin: vendor.gstin || '',
+      paymentTerms: vendor.paymentTerms ? vendor.paymentTerms.toString() : '30',
+      isActive: vendor.isActive,
+    });
+    setEditingId(vendor.id);
+    setIsModalOpen(true);
+  };
+
+  const openCreateModal = () => {
+    setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30', isActive: true });
+    setEditingId(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      const url = editingId ? `/api/vendors/${editingId}` : '/api/vendors';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          phone: formData.phone,
+          address: formData.address || undefined,
+          state: formData.state || undefined,
+          email: formData.email || undefined,
+          gstin: formData.gstin || undefined,
+          paymentTerms: formData.paymentTerms,
+          isActive: formData.isActive,
+        }),
+      });
+      
+      if (res.ok) {
+        setIsModalOpen(false);
+        setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30', isActive: true });
+        setEditingId(null);
+        fetchVendors();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error(`Failed to ${editingId ? 'update' : 'create'} vendor`, error);
+      alert(`Failed to ${editingId ? 'update' : 'create'} vendor`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the vendor "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/vendors/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        fetchVendors();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to delete vendor', error);
+      alert('Failed to delete vendor');
       setLoading(false);
     }
   };
@@ -65,7 +168,10 @@ export default function VendorsPage() {
             <span className="text-[#c4c7c8] font-body-md text-[13px]">Status: Active</span>
             <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
           </div>
-          <button className="bg-primary text-background px-6 rounded-xl font-bold font-body-md flex items-center gap-2 hover:bg-opacity-90 transition-all shadow-sm">
+          <button 
+            onClick={openCreateModal}
+            className="bg-primary text-background px-6 rounded-xl font-bold font-body-md flex items-center gap-2 hover:bg-opacity-90 transition-all shadow-sm"
+          >
             <span className="material-symbols-outlined text-[20px]">add</span>
             Add Vendor
           </button>
@@ -123,7 +229,9 @@ export default function VendorsPage() {
                   </td>
                   <td className="px-6 py-5 text-center">
                     <div className="inline-flex items-center gap-1 bg-surface-container-highest px-2.5 py-1 rounded-full border-[0.5px] border-[#444]">
-                      <span className="font-data-tabular font-bold text-primary text-[13px]">{vendor.rating.toFixed(1)}</span>
+                      <span className="font-data-tabular font-bold text-primary text-[13px]">
+                        {vendor.rating !== undefined && vendor.rating !== null ? vendor.rating.toFixed(1) : 'N/A'}
+                      </span>
                       <span className="material-symbols-outlined text-[14px] text-amber-400" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
                     </div>
                   </td>
@@ -134,13 +242,32 @@ export default function VendorsPage() {
                       ) : (
                         <span className="bg-outline-variant/20 text-outline border-[0.5px] border-outline-variant/30 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider">Inactive</span>
                       )}
-                      <span className="text-[12px] text-on-surface-variant bg-[#222] px-2 py-0.5 rounded border-[0.5px] border-[#333]">Net {vendor.paymentTerms} Days</span>
+                      <span className="text-[12px] text-on-surface-variant bg-[#222] px-2 py-0.5 rounded border-[0.5px] border-[#333]">Net {vendor.paymentTerms || '30'} Days</span>
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <button className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100 hover:bg-[#333] rounded-md">
-                      <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-                    </button>
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(vendor);
+                        }}
+                        className="p-1.5 text-outline hover:text-primary transition-colors rounded-md hover:bg-[#333]"
+                        title="Edit"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(vendor.id, vendor.name);
+                        }}
+                        className="p-1.5 text-outline hover:text-error transition-colors rounded-md hover:bg-[#333]"
+                        title="Delete"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -148,6 +275,121 @@ export default function VendorsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Add Vendor Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto hide-scrollbar">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-headline-md text-headline-md text-primary">
+                {editingId ? 'Edit Vendor' : 'Add New Vendor'}
+              </h3>
+              <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
+            </div>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div>
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Company / Vendor Name *</label>
+                <input 
+                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                  placeholder="e.g. Acme Supplies" 
+                  type="text" 
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Phone *</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="+91..." 
+                    type="text" 
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Email</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="contact@company.com" 
+                    type="email" 
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Address *</label>
+                <input 
+                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                  placeholder="Full business address" 
+                  type="text" 
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  required={!editingId}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">State *</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="e.g. Maharashtra" 
+                    type="text" 
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    required={!editingId}
+                  />
+                </div>
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">GSTIN</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="15-digit GSTIN" 
+                    type="text" 
+                    value={formData.gstin}
+                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Payment Terms (Days)</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="30" 
+                    type="number" 
+                    value={formData.paymentTerms}
+                    onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                  />
+                </div>
+                {editingId && (
+                  <div>
+                    <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Status</label>
+                    <select 
+                      className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                      value={formData.isActive.toString()}
+                      onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                    >
+                      <option value="true">Active</option>
+                      <option value="false">Inactive</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
+                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
+                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

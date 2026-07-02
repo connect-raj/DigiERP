@@ -17,6 +17,14 @@ export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    hsnCode: '',
+    gstRate: '18',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchCategories = async () => {
     try {
@@ -29,6 +37,83 @@ export default function CategoriesPage() {
     } catch (error) {
       console.error('Failed to fetch categories', error);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const openEditModal = (category: Category) => {
+    setFormData({
+      name: category.name,
+      hsnCode: category.hsnCode,
+      gstRate: category.gstRate.toString(),
+    });
+    setEditingId(category.id);
+    setIsModalOpen(true);
+  };
+
+  const openCreateModal = () => {
+    setFormData({ name: '', hsnCode: '', gstRate: '18' });
+    setEditingId(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      const url = editingId ? `/api/categories/${editingId}` : '/api/categories';
+      const method = editingId ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          hsnCode: formData.hsnCode,
+          gstRate: Number(formData.gstRate),
+        }),
+      });
+      
+      if (res.ok) {
+        setIsModalOpen(false);
+        setFormData({ name: '', hsnCode: '', gstRate: '18' });
+        setEditingId(null);
+        fetchCategories();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error(`Failed to ${editingId ? 'update' : 'create'} category`, error);
+      alert(`Failed to ${editingId ? 'update' : 'create'} category`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the category "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        fetchCategories();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to delete category', error);
+      alert('Failed to delete category');
       setLoading(false);
     }
   };
@@ -46,7 +131,7 @@ export default function CategoriesPage() {
           <p className="font-body-md text-body-md text-on-surface-variant mt-1">Manage industrial classifications and taxation parameters.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={openCreateModal}
           className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-body-md font-bold flex items-center gap-2 hover:bg-opacity-90 transition-all"
         >
           <span className="material-symbols-outlined text-[20px]">add</span>
@@ -101,9 +186,22 @@ export default function CategoriesPage() {
                   </td>
                   <td className="px-6 py-4 text-right font-data-tabular text-on-surface">{category._count?.products || 0}</td>
                   <td className="px-6 py-4 text-right">
-                    <button className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100">
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => openEditModal(category)}
+                        className="p-1.5 text-outline hover:text-primary transition-colors rounded-md"
+                        title="Edit"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(category.id, category.name)}
+                        className="p-1.5 text-outline hover:text-error transition-colors rounded-md"
+                        title="Delete"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -118,32 +216,54 @@ export default function CategoriesPage() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
           <div className="relative bg-[#1c1c1c] border-[0.5px] border-[#444] rounded-xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-headline-md text-headline-md text-primary">Add New Category</h3>
+              <h3 className="font-headline-md text-headline-md text-primary">
+                {editingId ? 'Edit Category' : 'Add New Category'}
+              </h3>
               <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
             </div>
-            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Category Name</label>
-                <input className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" placeholder="e.g. UV Curable Inks" type="text" />
+                <input 
+                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                  placeholder="e.g. UV Curable Inks" 
+                  type="text" 
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">HSN Code</label>
-                  <input className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" placeholder="8 digits" type="text" />
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="8 digits" 
+                    type="text" 
+                    value={formData.hsnCode}
+                    onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+                    required
+                  />
                 </div>
                 <div>
                   <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">GST Rate (%)</label>
-                  <select className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none">
+                  <select 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                    value={formData.gstRate}
+                    onChange={(e) => setFormData({ ...formData, gstRate: e.target.value })}
+                  >
                     <option value="5">5%</option>
                     <option value="12">12%</option>
-                    <option value="18" selected>18%</option>
+                    <option value="18">18%</option>
                     <option value="28">28%</option>
                   </select>
                 </div>
               </div>
               <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
-                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button">Cancel</button>
-                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all" type="submit">Create</button>
+                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
+                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
+                </button>
               </div>
             </form>
           </div>
