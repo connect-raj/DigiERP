@@ -5,13 +5,15 @@ import React, { useState, useEffect } from 'react';
 type Vendor = {
   id: string;
   name: string;
-  contactPerson: string | null;
+  contactPerson?: string | null;
   email: string | null;
   phone: string | null;
+  address?: string;
+  state?: string;
   gstin: string | null;
-  rating: number;
+  rating?: number;
   isActive: boolean;
-  paymentTerms: number;
+  paymentTerms?: string | number | null;
 };
 
 export default function VendorsPage() {
@@ -30,6 +32,7 @@ export default function VendorsPage() {
     email: '',
     gstin: '',
     paymentTerms: '30',
+    isActive: true,
   });
 
   const fetchVendors = async () => {
@@ -53,18 +56,19 @@ export default function VendorsPage() {
     setFormData({
       name: vendor.name,
       phone: vendor.phone || '',
-      address: '', // We don't have address in the Vendor list type right now, might need to fetch it or leave it blank if not returned
-      state: '',
+      address: vendor.address || '',
+      state: vendor.state || '',
       email: vendor.email || '',
       gstin: vendor.gstin || '',
-      paymentTerms: vendor.paymentTerms.toString(),
+      paymentTerms: vendor.paymentTerms ? vendor.paymentTerms.toString() : '30',
+      isActive: vendor.isActive,
     });
     setEditingId(vendor.id);
     setIsModalOpen(true);
   };
 
   const openCreateModal = () => {
-    setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30' });
+    setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30', isActive: true });
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -89,12 +93,13 @@ export default function VendorsPage() {
           email: formData.email || undefined,
           gstin: formData.gstin || undefined,
           paymentTerms: formData.paymentTerms,
+          isActive: formData.isActive,
         }),
       });
       
       if (res.ok) {
         setIsModalOpen(false);
-        setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30' });
+        setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30', isActive: true });
         setEditingId(null);
         fetchVendors();
       } else {
@@ -106,6 +111,31 @@ export default function VendorsPage() {
       alert(`Failed to ${editingId ? 'update' : 'create'} vendor`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the vendor "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/vendors/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        fetchVendors();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to delete vendor', error);
+      alert('Failed to delete vendor');
+      setLoading(false);
     }
   };
 
@@ -199,7 +229,9 @@ export default function VendorsPage() {
                   </td>
                   <td className="px-6 py-5 text-center">
                     <div className="inline-flex items-center gap-1 bg-surface-container-highest px-2.5 py-1 rounded-full border-[0.5px] border-[#444]">
-                      <span className="font-data-tabular font-bold text-primary text-[13px]">{vendor.rating.toFixed(1)}</span>
+                      <span className="font-data-tabular font-bold text-primary text-[13px]">
+                        {vendor.rating !== undefined && vendor.rating !== null ? vendor.rating.toFixed(1) : 'N/A'}
+                      </span>
                       <span className="material-symbols-outlined text-[14px] text-amber-400" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
                     </div>
                   </td>
@@ -210,19 +242,32 @@ export default function VendorsPage() {
                       ) : (
                         <span className="bg-outline-variant/20 text-outline border-[0.5px] border-outline-variant/30 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider">Inactive</span>
                       )}
-                      <span className="text-[12px] text-on-surface-variant bg-[#222] px-2 py-0.5 rounded border-[0.5px] border-[#333]">Net {vendor.paymentTerms} Days</span>
+                      <span className="text-[12px] text-on-surface-variant bg-[#222] px-2 py-0.5 rounded border-[0.5px] border-[#333]">Net {vendor.paymentTerms || '30'} Days</span>
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(vendor);
-                      }}
-                      className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100 hover:bg-[#333] rounded-md"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(vendor);
+                        }}
+                        className="p-1.5 text-outline hover:text-primary transition-colors rounded-md hover:bg-[#333]"
+                        title="Edit"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(vendor.id, vendor.name);
+                        }}
+                        className="p-1.5 text-outline hover:text-error transition-colors rounded-md hover:bg-[#333]"
+                        title="Delete"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -310,15 +355,30 @@ export default function VendorsPage() {
                   />
                 </div>
               </div>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Payment Terms (Days)</label>
-                <input 
-                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                  placeholder="30" 
-                  type="number" 
-                  value={formData.paymentTerms}
-                  onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Payment Terms (Days)</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="30" 
+                    type="number" 
+                    value={formData.paymentTerms}
+                    onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                  />
+                </div>
+                {editingId && (
+                  <div>
+                    <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Status</label>
+                    <select 
+                      className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                      value={formData.isActive.toString()}
+                      onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                    >
+                      <option value="true">Active</option>
+                      <option value="false">Inactive</option>
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
                 <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>

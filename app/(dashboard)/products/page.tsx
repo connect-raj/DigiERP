@@ -118,6 +118,31 @@ export default function ProductsPage() {
     }
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the product "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        fetchProducts();
+      } else {
+        const error = await res.json();
+        alert(`Error: ${error.message}`);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to delete product', error);
+      alert('Failed to delete product');
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -217,12 +242,22 @@ export default function ProductsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => openEditModal(product)}
-                      className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => openEditModal(product)}
+                        className="p-1.5 text-outline hover:text-primary transition-colors rounded-md"
+                        title="Edit"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(product.id, product.name)}
+                        className="p-1.5 text-outline hover:text-error transition-colors rounded-md"
+                        title="Delete"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
