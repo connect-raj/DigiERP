@@ -11,7 +11,7 @@ type Product = {
   basePrice: number;
   unit: string;
   currentStock: number;
-  minStockLevel: number;
+  lowerStockLimit: number;
   isActive: boolean;
 };
 
@@ -66,7 +66,7 @@ export default function ProductsPage() {
       categoryId: product.categoryId || '',
       basePrice: product.basePrice.toString(),
       unit: product.unit,
-      lowerStockLimit: product.minStockLevel.toString(),
+      lowerStockLimit: product.lowerStockLimit.toString(),
       isActive: product.isActive,
     });
     setEditingId(product.id);
@@ -152,7 +152,7 @@ export default function ProductsPage() {
       {/* Controls Container */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         {/* Search */}
-        <div className="md:col-span-5 bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl p-1 flex items-center h-[52px] focus-within:border-[#555] transition-colors">
+        <div className="md:col-span-9 bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl p-1 flex items-center h-[52px] focus-within:border-[#555] transition-colors">
           <span className="material-symbols-outlined text-[#8e9192] px-3">search</span>
           <input 
             className="w-full bg-transparent border-none text-on-surface placeholder:text-[#8e9192] focus:ring-0 font-body-md text-[13px] p-0 h-full" 
@@ -226,10 +226,10 @@ export default function ProductsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <span className={`font-data-tabular text-[13px] ${product.currentStock < product.minStockLevel ? 'text-error font-bold' : 'text-primary'}`}>
+                      <span className={`font-data-tabular text-[13px] ${product.currentStock < product.lowerStockLimit ? 'text-error font-bold' : 'text-primary'}`}>
                         {product.currentStock} {product.unit}
                       </span>
-                      {product.currentStock < product.minStockLevel && (
+                      {product.currentStock < product.lowerStockLimit && (
                         <span className="bg-error/10 text-error text-[10px] px-2 py-0.5 rounded uppercase font-bold tracking-tighter">Low</span>
                       )}
                     </div>
