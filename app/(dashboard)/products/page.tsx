@@ -22,6 +22,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -29,6 +30,7 @@ export default function ProductsPage() {
     basePrice: '',
     unit: 'LTR',
     lowerStockLimit: '10',
+    isActive: true,
   });
 
   const fetchProducts = async () => {
@@ -58,12 +60,34 @@ export default function ProductsPage() {
     }
   };
 
-  const handleCreateProduct = async (e: React.FormEvent) => {
+  const openEditModal = (product: Product) => {
+    setFormData({
+      name: product.name,
+      categoryId: product.categoryId || '',
+      basePrice: product.basePrice.toString(),
+      unit: product.unit,
+      lowerStockLimit: product.minStockLevel.toString(),
+      isActive: product.isActive,
+    });
+    setEditingId(product.id);
+    setIsModalOpen(true);
+  };
+
+  const openCreateModal = () => {
+    setFormData({ name: '', categoryId: '', basePrice: '', unit: 'LTR', lowerStockLimit: '10', isActive: true });
+    setEditingId(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setIsSubmitting(true);
-      const res = await fetch('/api/products', {
-        method: 'POST',
+      const url = editingId ? `/api/products/${editingId}` : '/api/products';
+      const method = editingId ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -73,20 +97,22 @@ export default function ProductsPage() {
           basePrice: Number(formData.basePrice),
           unit: formData.unit,
           lowerStockLimit: Number(formData.lowerStockLimit),
+          ...(editingId ? { isActive: formData.isActive } : {}),
         }),
       });
       
       if (res.ok) {
         setIsModalOpen(false);
-        setFormData({ name: '', categoryId: '', basePrice: '', unit: 'LTR', lowerStockLimit: '10' });
+        setFormData({ name: '', categoryId: '', basePrice: '', unit: 'LTR', lowerStockLimit: '10', isActive: true });
+        setEditingId(null);
         fetchProducts();
       } else {
         const error = await res.json();
         alert(`Error: ${error.message}`);
       }
     } catch (error) {
-      console.error('Failed to create product', error);
-      alert('Failed to create product');
+      console.error(`Failed to ${editingId ? 'update' : 'create'} product`, error);
+      alert(`Failed to ${editingId ? 'update' : 'create'} product`);
     } finally {
       setIsSubmitting(false);
     }
@@ -113,7 +139,7 @@ export default function ProductsPage() {
         </div>
         <div className="md:col-span-3 flex justify-end">
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             className="w-full h-[52px] bg-primary text-background rounded-xl font-bold font-body-md flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all shadow-sm"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
@@ -191,7 +217,10 @@ export default function ProductsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100">
+                    <button 
+                      onClick={() => openEditModal(product)}
+                      className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100"
+                    >
                       <span className="material-symbols-outlined text-[18px]">edit</span>
                     </button>
                   </td>
@@ -207,10 +236,12 @@ export default function ProductsPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-headline-md text-headline-md text-primary">Add New Product</h3>
+              <h3 className="font-headline-md text-headline-md text-primary">
+                {editingId ? 'Edit Product' : 'Add New Product'}
+              </h3>
               <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
             </div>
-            <form className="space-y-4" onSubmit={handleCreateProduct}>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Product Name</label>
                 <input 
@@ -264,22 +295,37 @@ export default function ProductsPage() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Low Stock Alert Level</label>
-                <input 
-                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                  placeholder="10" 
-                  type="number" 
-                  min="0"
-                  value={formData.lowerStockLimit}
-                  onChange={(e) => setFormData({ ...formData, lowerStockLimit: e.target.value })}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Low Stock Alert Level</label>
+                  <input 
+                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
+                    placeholder="10" 
+                    type="number" 
+                    min="0"
+                    value={formData.lowerStockLimit}
+                    onChange={(e) => setFormData({ ...formData, lowerStockLimit: e.target.value })}
+                    required
+                  />
+                </div>
+                {editingId && (
+                  <div>
+                    <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Status</label>
+                    <select 
+                      className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                      value={formData.isActive.toString()}
+                      onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                    >
+                      <option value="true">Active</option>
+                      <option value="false">Inactive</option>
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
                 <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
                 <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create'}
+                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>

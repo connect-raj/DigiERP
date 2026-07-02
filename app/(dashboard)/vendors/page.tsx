@@ -20,6 +20,7 @@ export default function VendorsPage() {
   const [search, setSearch] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -48,20 +49,43 @@ export default function VendorsPage() {
     }
   };
 
-  const handleCreateVendor = async (e: React.FormEvent) => {
+  const openEditModal = (vendor: Vendor) => {
+    setFormData({
+      name: vendor.name,
+      phone: vendor.phone || '',
+      address: '', // We don't have address in the Vendor list type right now, might need to fetch it or leave it blank if not returned
+      state: '',
+      email: vendor.email || '',
+      gstin: vendor.gstin || '',
+      paymentTerms: vendor.paymentTerms.toString(),
+    });
+    setEditingId(vendor.id);
+    setIsModalOpen(true);
+  };
+
+  const openCreateModal = () => {
+    setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30' });
+    setEditingId(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setIsSubmitting(true);
-      const res = await fetch('/api/vendors', {
-        method: 'POST',
+      const url = editingId ? `/api/vendors/${editingId}` : '/api/vendors';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           name: formData.name,
           phone: formData.phone,
-          address: formData.address,
-          state: formData.state,
+          address: formData.address || undefined,
+          state: formData.state || undefined,
           email: formData.email || undefined,
           gstin: formData.gstin || undefined,
           paymentTerms: formData.paymentTerms,
@@ -71,14 +95,15 @@ export default function VendorsPage() {
       if (res.ok) {
         setIsModalOpen(false);
         setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30' });
+        setEditingId(null);
         fetchVendors();
       } else {
         const error = await res.json();
         alert(`Error: ${error.message}`);
       }
     } catch (error) {
-      console.error('Failed to create vendor', error);
-      alert('Failed to create vendor');
+      console.error(`Failed to ${editingId ? 'update' : 'create'} vendor`, error);
+      alert(`Failed to ${editingId ? 'update' : 'create'} vendor`);
     } finally {
       setIsSubmitting(false);
     }
@@ -114,7 +139,7 @@ export default function VendorsPage() {
             <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
           </div>
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             className="bg-primary text-background px-6 rounded-xl font-bold font-body-md flex items-center gap-2 hover:bg-opacity-90 transition-all shadow-sm"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
@@ -189,8 +214,14 @@ export default function VendorsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <button className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100 hover:bg-[#333] rounded-md">
-                      <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(vendor);
+                      }}
+                      className="p-1.5 text-outline hover:text-primary transition-all opacity-0 group-hover:opacity-100 hover:bg-[#333] rounded-md"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
                     </button>
                   </td>
                 </tr>
@@ -205,10 +236,12 @@ export default function VendorsPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto hide-scrollbar">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-headline-md text-headline-md text-primary">Add New Vendor</h3>
+              <h3 className="font-headline-md text-headline-md text-primary">
+                {editingId ? 'Edit Vendor' : 'Add New Vendor'}
+              </h3>
               <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
             </div>
-            <form className="space-y-4" onSubmit={handleCreateVendor}>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Company / Vendor Name *</label>
                 <input 
@@ -251,7 +284,7 @@ export default function VendorsPage() {
                   type="text" 
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required
+                  required={!editingId}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -263,7 +296,7 @@ export default function VendorsPage() {
                     type="text" 
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    required
+                    required={!editingId}
                   />
                 </div>
                 <div>
@@ -290,7 +323,7 @@ export default function VendorsPage() {
               <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
                 <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
                 <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create'}
+                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>
