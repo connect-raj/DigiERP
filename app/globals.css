@@ -10,7 +10,7 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
-  
+
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -20,7 +20,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  
+
   --color-primary: #ffffff;
   --color-on-primary: #2f3131;
   --color-secondary: #adc6ff;
@@ -104,9 +104,9 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-[#181818] text-on-surface font-body-md;
+    @apply text-on-surface font-body-md bg-[#181818];
   }
-  
+
   /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 6px;

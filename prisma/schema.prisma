@@ -19,13 +19,15 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  passwordHash String
-  role         Role     @default(user)
-  status       String   @default("active")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String             @id @default(uuid())
+  username          String             @unique
+  passwordHash      String
+  role              Role               @default(user)
+  status            String             @default("active")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  vendorPayments    VendorPayment[]
+  stockTransactions StockTransaction[]
 }
 
 model Category {
@@ -53,6 +55,7 @@ model Product {
   vendorProducts  VendorProduct[]
   customerPrices  CustomerPrice[]
   stockTxns       StockTransaction[]
+  purchaseItems   PurchaseItem[]
 }
 
 model Vendor {
@@ -68,6 +71,8 @@ model Vendor {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   vendorProducts VendorProduct[]
+  purchases      Purchase[]
+  vendorPayments VendorPayment[]
 }
 
 model VendorProduct {
@@ -90,15 +95,84 @@ model CustomerPrice {
 }
 
 model StockTransaction {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   productId     String
-  changeQty     Decimal  @db.Decimal(12, 3)
-  stockBefore   Decimal  @db.Decimal(12, 3)
-  stockAfter    Decimal  @db.Decimal(12, 3)
+  changeQty     Decimal   @db.Decimal(12, 3)
+  stockBefore   Decimal   @db.Decimal(12, 3)
+  stockAfter    Decimal   @db.Decimal(12, 3)
   reason        String
   purchaseId    String?
   challanId     String?
   performedById String?
-  createdAt     DateTime @default(now())
-  product       Product  @relation(fields: [productId], references: [id])
+  createdAt     DateTime  @default(now())
+  product       Product   @relation(fields: [productId], references: [id])
+  purchase      Purchase? @relation(fields: [purchaseId], references: [id])
+  performedBy   User?     @relation(fields: [performedById], references: [id])
+}
+
+model Purchase {
+  id              String        @id @default(uuid())
+  purchaseNo      String        @unique
+  vendorId        String
+  vendorInvoiceNo String
+  date            DateTime
+  entryDate       DateTime      @default(now())
+  totalAmount     Decimal       @db.Decimal(12, 2)
+  totalGst        Decimal       @db.Decimal(12, 2)
+  paidAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  paymentStatus        PaymentStatus @default(UNPAID)
+  isCancelled          Boolean       @default(false)
+  expectedDeliveryDate DateTime?
+  receivedDate         DateTime?
+  createdAt            DateTime      @default(now())
+
+  vendor         Vendor             @relation(fields: [vendorId], references: [id])
+  items          PurchaseItem[]
+  vendorPayments VendorPayment[]
+  stockTxns      StockTransaction[]
+}
+
+model PurchaseItem {
+  id         String  @id @default(uuid())
+  purchaseId String
+  productId  String
+  quantity   Decimal @db.Decimal(12, 3)
+  unitPrice  Decimal @db.Decimal(12, 2)
+  cgst       Decimal @default(0) @db.Decimal(12, 2)
+  sgst       Decimal @default(0) @db.Decimal(12, 2)
+  igst       Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal  Decimal @db.Decimal(12, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+}
+
+model VendorPayment {
+  id           String      @id @default(uuid())
+  vendorId     String
+  purchaseId   String?
+  amount       Decimal     @db.Decimal(12, 2)
+  mode         PaymentMode @default(BANK_TRANSFER)
+  reference    String?
+  date         DateTime
+  recordedById String?
+  createdAt    DateTime    @default(now())
+
+  vendor     Vendor    @relation(fields: [vendorId], references: [id])
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id])
+  recordedBy User?     @relation(fields: [recordedById], references: [id])
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PaymentMode {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  UPI
+  OTHER
 }
