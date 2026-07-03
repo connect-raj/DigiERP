@@ -68,7 +68,16 @@ export default function VendorsPage() {
   };
 
   const openCreateModal = () => {
-    setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30', isActive: true });
+    setFormData({
+      name: '',
+      phone: '',
+      address: '',
+      state: '',
+      email: '',
+      gstin: '',
+      paymentTerms: '30',
+      isActive: true,
+    });
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -96,10 +105,19 @@ export default function VendorsPage() {
           isActive: formData.isActive,
         }),
       });
-      
+
       if (res.ok) {
         setIsModalOpen(false);
-        setFormData({ name: '', phone: '', address: '', state: '', email: '', gstin: '', paymentTerms: '30', isActive: true });
+        setFormData({
+          name: '',
+          phone: '',
+          address: '',
+          state: '',
+          email: '',
+          gstin: '',
+          paymentTerms: '30',
+          isActive: true,
+        });
         setEditingId(null);
         fetchVendors();
       } else {
@@ -115,16 +133,20 @@ export default function VendorsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete the vendor "${name}"? This action cannot be undone.`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete the vendor "${name}"? This action cannot be undone.`
+      )
+    ) {
       return;
     }
-    
+
     try {
       setLoading(true);
       const res = await fetch(`/api/vendors/${id}`, {
         method: 'DELETE',
       });
-      
+
       if (res.ok) {
         fetchVendors();
       } else {
@@ -140,37 +162,40 @@ export default function VendorsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line
     fetchVendors();
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex flex-col h-full gap-8">
+    <div className="flex h-full flex-col gap-8">
       {/* Header and Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
-        <div className="md:col-span-5 flex flex-col gap-4">
+      <div className="grid grid-cols-1 items-end gap-6 md:grid-cols-12">
+        <div className="flex flex-col gap-4 md:col-span-5">
           <div>
             <h1 className="font-display text-display text-primary">Vendors Directory</h1>
-            <p className="font-body-md text-on-surface-variant mt-1">Manage supplier relationships and contact details.</p>
+            <p className="font-body-md text-on-surface-variant mt-1">
+              Manage supplier relationships and contact details.
+            </p>
           </div>
-          <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl p-1 flex items-center h-[52px] focus-within:border-secondary transition-colors">
-            <span className="material-symbols-outlined text-[#8e9192] px-3">search</span>
-            <input 
-              className="w-full bg-transparent border-none text-primary placeholder:text-[#8e9192] focus:ring-0 font-body-md text-[13px] p-0" 
-              placeholder="Search vendors by name, GSTIN, or contact..." 
-              type="text" 
+          <div className="focus-within:border-secondary flex h-[52px] items-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 transition-colors">
+            <span className="material-symbols-outlined px-3 text-[#8e9192]">search</span>
+            <input
+              className="text-primary font-body-md w-full border-none bg-transparent p-0 text-[13px] placeholder:text-[#8e9192] focus:ring-0"
+              placeholder="Search vendors by name, GSTIN, or contact..."
+              type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
-        <div className="md:col-span-7 flex justify-end gap-4 h-[52px]">
-          <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl px-4 flex items-center justify-between min-w-[160px] cursor-pointer hover:border-[#555] transition-colors">
-            <span className="text-[#c4c7c8] font-body-md text-[13px]">Status: Active</span>
+        <div className="flex h-[52px] justify-end gap-4 md:col-span-7">
+          <div className="flex min-w-[160px] cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
+            <span className="font-body-md text-[13px] text-[#c4c7c8]">Status: Active</span>
             <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
           </div>
-          <button 
+          <button
             onClick={openCreateModal}
-            className="bg-primary text-background px-6 rounded-xl font-bold font-body-md flex items-center gap-2 hover:bg-opacity-90 transition-all shadow-sm"
+            className="bg-primary text-background font-body-md hover:bg-opacity-90 flex items-center gap-2 rounded-xl px-6 font-bold shadow-sm transition-all"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
             Add Vendor
@@ -179,90 +204,127 @@ export default function VendorsPage() {
       </div>
 
       {/* Vendors Table */}
-      <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl overflow-hidden flex flex-col min-h-[500px]">
-        <table className="w-full text-left border-collapse">
+      <div className="flex min-h-[500px] flex-col overflow-hidden rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c]">
+        <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b-[0.5px] border-[#333] bg-[#222]">
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Vendor & Contact</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Contact Info</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase text-center">Rating</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Status & Terms</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase text-right">Actions</th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Vendor & Contact
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Contact Info
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-center tracking-widest uppercase">
+                Rating
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Status & Terms
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-right tracking-widest uppercase">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y-[0.5px] divide-[#333]">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-on-surface-variant">Loading vendors...</td>
+                <td colSpan={5} className="text-on-surface-variant px-6 py-8 text-center">
+                  Loading vendors...
+                </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-on-surface-variant">No vendors found.</td>
+                <td colSpan={5} className="text-on-surface-variant px-6 py-8 text-center">
+                  No vendors found.
+                </td>
               </tr>
             ) : (
               vendors.map((vendor) => (
-                <tr key={vendor.id} className="hover:bg-[#252525] transition-colors group cursor-pointer">
+                <tr
+                  key={vendor.id}
+                  className="group cursor-pointer transition-colors hover:bg-[#252525]"
+                >
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-surface-container-high border-[0.5px] border-[#444] flex items-center justify-center font-display font-bold text-primary">
+                      <div className="bg-surface-container-high font-display text-primary flex h-10 w-10 items-center justify-center rounded-lg border-[0.5px] border-[#444] font-bold">
                         {vendor.name.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-semibold text-primary text-[14px]">{vendor.name}</span>
-                        <span className="text-[12px] text-on-surface-variant flex items-center gap-1 mt-0.5">
-                          <span className="material-symbols-outlined text-[14px]">person</span> {vendor.contactPerson || 'N/A'}
+                        <span className="text-primary text-[14px] font-semibold">
+                          {vendor.name}
+                        </span>
+                        <span className="text-on-surface-variant mt-0.5 flex items-center gap-1 text-[12px]">
+                          <span className="material-symbols-outlined text-[14px]">person</span>{' '}
+                          {vendor.contactPerson || 'N/A'}
                         </span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2 text-[13px] text-on-surface-variant">
-                        <span className="material-symbols-outlined text-[16px] text-[#8e9192]">call</span>
+                      <div className="text-on-surface-variant flex items-center gap-2 text-[13px]">
+                        <span className="material-symbols-outlined text-[16px] text-[#8e9192]">
+                          call
+                        </span>
                         {vendor.phone || 'N/A'}
                       </div>
-                      <div className="flex items-center gap-2 text-[13px] text-on-surface-variant">
-                        <span className="material-symbols-outlined text-[16px] text-[#8e9192]">mail</span>
+                      <div className="text-on-surface-variant flex items-center gap-2 text-[13px]">
+                        <span className="material-symbols-outlined text-[16px] text-[#8e9192]">
+                          mail
+                        </span>
                         {vendor.email || 'N/A'}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5 text-center">
-                    <div className="inline-flex items-center gap-1 bg-surface-container-highest px-2.5 py-1 rounded-full border-[0.5px] border-[#444]">
-                      <span className="font-data-tabular font-bold text-primary text-[13px]">
-                        {vendor.rating !== undefined && vendor.rating !== null ? vendor.rating.toFixed(1) : 'N/A'}
+                    <div className="bg-surface-container-highest inline-flex items-center gap-1 rounded-full border-[0.5px] border-[#444] px-2.5 py-1">
+                      <span className="font-data-tabular text-primary text-[13px] font-bold">
+                        {vendor.rating !== undefined && vendor.rating !== null
+                          ? vendor.rating.toFixed(1)
+                          : 'N/A'}
                       </span>
-                      <span className="material-symbols-outlined text-[14px] text-amber-400" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
+                      <span
+                        className="material-symbols-outlined text-[14px] text-amber-400"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        star
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-col items-start gap-2">
                       {vendor.isActive ? (
-                        <span className="bg-green-500/10 text-green-400 border-[0.5px] border-green-500/20 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider">Active</span>
+                        <span className="rounded border-[0.5px] border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-bold tracking-wider text-green-400 uppercase">
+                          Active
+                        </span>
                       ) : (
-                        <span className="bg-outline-variant/20 text-outline border-[0.5px] border-outline-variant/30 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider">Inactive</span>
+                        <span className="bg-outline-variant/20 text-outline border-outline-variant/30 rounded border-[0.5px] px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase">
+                          Inactive
+                        </span>
                       )}
-                      <span className="text-[12px] text-on-surface-variant bg-[#222] px-2 py-0.5 rounded border-[0.5px] border-[#333]">Net {vendor.paymentTerms || '30'} Days</span>
+                      <span className="text-on-surface-variant rounded border-[0.5px] border-[#333] bg-[#222] px-2 py-0.5 text-[12px]">
+                        Net {vendor.paymentTerms || '30'} Days
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
+                    <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openEditModal(vendor);
                         }}
-                        className="p-1.5 text-outline hover:text-primary transition-colors rounded-md hover:bg-[#333]"
+                        className="text-outline hover:text-primary rounded-md p-1.5 transition-colors hover:bg-[#333]"
                         title="Edit"
                       >
                         <span className="material-symbols-outlined text-[18px]">edit</span>
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(vendor.id, vendor.name);
                         }}
-                        className="p-1.5 text-outline hover:text-error transition-colors rounded-md hover:bg-[#333]"
+                        className="text-outline hover:text-error rounded-md p-1.5 transition-colors hover:bg-[#333]"
                         title="Delete"
                       >
                         <span className="material-symbols-outlined text-[18px]">delete</span>
@@ -278,21 +340,28 @@ export default function VendorsPage() {
 
       {/* Add Vendor Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto hide-scrollbar">
-            <div className="flex items-center justify-between mb-6">
+        <div className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
+          <div className="animate-in zoom-in-95 hide-scrollbar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6 shadow-2xl duration-200">
+            <div className="mb-6 flex items-center justify-between">
               <h3 className="font-headline-md text-headline-md text-primary">
                 {editingId ? 'Edit Vendor' : 'Add New Vendor'}
               </h3>
-              <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
+              <button
+                className="material-symbols-outlined text-outline hover:text-primary"
+                onClick={() => setIsModalOpen(false)}
+              >
+                close
+              </button>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Company / Vendor Name *</label>
-                <input 
-                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                  placeholder="e.g. Acme Supplies" 
-                  type="text" 
+                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                  Company / Vendor Name *
+                </label>
+                <input
+                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                  placeholder="e.g. Acme Supplies"
+                  type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
@@ -300,33 +369,39 @@ export default function VendorsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Phone *</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="+91..." 
-                    type="text" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    Phone *
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="+91..."
+                    type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Email</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="contact@company.com" 
-                    type="email" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    Email
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="contact@company.com"
+                    type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
                 </div>
               </div>
               <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Address *</label>
-                <input 
-                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                  placeholder="Full business address" 
-                  type="text" 
+                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                  Address *
+                </label>
+                <input
+                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                  placeholder="Full business address"
+                  type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   required={!editingId}
@@ -334,22 +409,26 @@ export default function VendorsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">State *</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="e.g. Maharashtra" 
-                    type="text" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    State *
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="e.g. Maharashtra"
+                    type="text"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                     required={!editingId}
                   />
                 </div>
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">GSTIN</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="15-digit GSTIN" 
-                    type="text" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    GSTIN
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="15-digit GSTIN"
+                    type="text"
                     value={formData.gstin}
                     onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
                   />
@@ -357,22 +436,28 @@ export default function VendorsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Payment Terms (Days)</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="30" 
-                    type="number" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    Payment Terms (Days)
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="30"
+                    type="number"
                     value={formData.paymentTerms}
                     onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
                   />
                 </div>
                 {editingId && (
                   <div>
-                    <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Status</label>
-                    <select 
-                      className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                    <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                      Status
+                    </label>
+                    <select
+                      className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
                       value={formData.isActive.toString()}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, isActive: e.target.value === 'true' })
+                      }
                     >
                       <option value="true">Active</option>
                       <option value="false">Inactive</option>
@@ -380,9 +465,20 @@ export default function VendorsPage() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
-                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
-                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
+              <div className="mt-6 flex gap-4 border-t-[0.5px] border-[#333] pt-4">
+                <button
+                  className="text-primary flex-1 rounded-lg border-[0.5px] border-[#444] py-2.5 font-semibold transition-all hover:bg-[#252525]"
+                  onClick={() => setIsModalOpen(false)}
+                  type="button"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-primary text-background hover:bg-opacity-90 flex-1 rounded-lg py-2.5 font-semibold transition-all disabled:opacity-50"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
                 </button>
               </div>

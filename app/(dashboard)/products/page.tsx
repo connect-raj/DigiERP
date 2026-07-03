@@ -20,7 +20,7 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,15 +38,15 @@ export default function ProductsPage() {
       setLoading(true);
       const url = new URL('/api/products', window.location.origin);
       if (search) url.searchParams.append('search', search);
-      
+
       const [prodRes, catRes] = await Promise.all([
         fetch(url.toString()),
-        fetch('/api/categories')
+        fetch('/api/categories'),
       ]);
-      
+
       const prodData = await prodRes.json();
       const catData = await catRes.json();
-      
+
       if (prodData.data) {
         setProducts(prodData.data);
       }
@@ -74,7 +74,14 @@ export default function ProductsPage() {
   };
 
   const openCreateModal = () => {
-    setFormData({ name: '', categoryId: '', basePrice: '', unit: 'LTR', lowerStockLimit: '10', isActive: true });
+    setFormData({
+      name: '',
+      categoryId: '',
+      basePrice: '',
+      unit: 'LTR',
+      lowerStockLimit: '10',
+      isActive: true,
+    });
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -85,7 +92,7 @@ export default function ProductsPage() {
       setIsSubmitting(true);
       const url = editingId ? `/api/products/${editingId}` : '/api/products';
       const method = editingId ? 'PUT' : 'POST';
-      
+
       const res = await fetch(url, {
         method,
         headers: {
@@ -100,10 +107,17 @@ export default function ProductsPage() {
           ...(editingId ? { isActive: formData.isActive } : {}),
         }),
       });
-      
+
       if (res.ok) {
         setIsModalOpen(false);
-        setFormData({ name: '', categoryId: '', basePrice: '', unit: 'LTR', lowerStockLimit: '10', isActive: true });
+        setFormData({
+          name: '',
+          categoryId: '',
+          basePrice: '',
+          unit: 'LTR',
+          lowerStockLimit: '10',
+          isActive: true,
+        });
         setEditingId(null);
         fetchProducts();
       } else {
@@ -119,16 +133,20 @@ export default function ProductsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete the product "${name}"? This action cannot be undone.`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete the product "${name}"? This action cannot be undone.`
+      )
+    ) {
       return;
     }
-    
+
     try {
       setLoading(true);
       const res = await fetch(`/api/products/${id}`, {
         method: 'DELETE',
       });
-      
+
       if (res.ok) {
         fetchProducts();
       } else {
@@ -144,115 +162,142 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line
     fetchProducts();
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex flex-col h-full gap-8">
+    <div className="flex h-full flex-col gap-8">
       {/* Controls Container */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
         {/* Search */}
-        <div className="md:col-span-9 bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl p-1 flex items-center h-[52px] focus-within:border-[#555] transition-colors">
-          <span className="material-symbols-outlined text-[#8e9192] px-3">search</span>
-          <input 
-            className="w-full bg-transparent border-none text-on-surface placeholder:text-[#8e9192] focus:ring-0 font-body-md text-[13px] p-0 h-full" 
-            placeholder="Search products by name, SKU, or category..." 
-            type="text" 
+        <div className="flex h-[52px] items-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 transition-colors focus-within:border-[#555] md:col-span-9">
+          <span className="material-symbols-outlined px-3 text-[#8e9192]">search</span>
+          <input
+            className="text-on-surface font-body-md h-full w-full border-none bg-transparent p-0 text-[13px] placeholder:text-[#8e9192] focus:ring-0"
+            placeholder="Search products by name, SKU, or category..."
+            type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="md:col-span-3 flex justify-end">
-          <button 
+        <div className="flex justify-end md:col-span-3">
+          <button
             onClick={openCreateModal}
-            className="w-full h-[52px] bg-primary text-background rounded-xl font-bold font-body-md flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all shadow-sm"
+            className="bg-primary text-background font-body-md hover:bg-opacity-90 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl font-bold shadow-sm transition-all"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
             Add Product
           </button>
         </div>
         {/* Filters */}
-        <div className="md:col-span-12 flex gap-4">
-          <div className="flex-1 bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl px-4 flex items-center justify-between relative group cursor-pointer hover:border-[#555] transition-colors">
-            <span className="text-[#c4c7c8] font-body-md text-[13px]">Category: All</span>
+        <div className="flex gap-4 md:col-span-12">
+          <div className="group relative flex flex-1 cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
+            <span className="font-body-md text-[13px] text-[#c4c7c8]">Category: All</span>
             <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
           </div>
-          <div className="flex-1 bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl px-4 flex items-center justify-between relative group cursor-pointer hover:border-[#555] transition-colors">
-            <span className="text-[#c4c7c8] font-body-md text-[13px]">Status: Active</span>
+          <div className="group relative flex flex-1 cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
+            <span className="font-body-md text-[13px] text-[#c4c7c8]">Status: Active</span>
             <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
           </div>
-          <button className="bg-[#1c1c1c] border-[0.5px] border-[#333] text-[#8e9192] px-4 rounded-xl flex items-center justify-center hover:bg-[#252525] transition-colors">
+          <button className="flex items-center justify-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 text-[#8e9192] transition-colors hover:bg-[#252525]">
             <span className="material-symbols-outlined">filter_list</span>
           </button>
         </div>
       </div>
 
       {/* Products Table */}
-      <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-xl overflow-hidden flex flex-col min-h-[500px]">
-        <table className="w-full text-left border-collapse">
+      <div className="flex min-h-[500px] flex-col overflow-hidden rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c]">
+        <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b-[0.5px] border-[#333] bg-[#222]">
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Name & SKU</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Category</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase text-right">Price</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Stock</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase">Status</th>
-              <th className="px-6 py-4 font-label-caps text-label-caps text-outline tracking-widest uppercase text-right">Actions</th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Name & SKU
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Category
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-right tracking-widest uppercase">
+                Price
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Stock
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
+                Status
+              </th>
+              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-right tracking-widest uppercase">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y-[0.5px] divide-[#333]">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-on-surface-variant">Loading products...</td>
+                <td colSpan={6} className="text-on-surface-variant px-6 py-8 text-center">
+                  Loading products...
+                </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-on-surface-variant">No products found.</td>
+                <td colSpan={6} className="text-on-surface-variant px-6 py-8 text-center">
+                  No products found.
+                </td>
               </tr>
             ) : (
               products.map((product) => (
-                <tr key={product.id} className="hover:bg-[#252525] transition-colors group">
+                <tr key={product.id} className="group transition-colors hover:bg-[#252525]">
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
-                      <span className="font-semibold text-primary">{product.name}</span>
-                      <span className="text-[11px] text-on-surface-variant font-data-tabular uppercase tracking-wider">{product.sku}</span>
+                      <span className="text-primary font-semibold">{product.name}</span>
+                      <span className="text-on-surface-variant font-data-tabular text-[11px] tracking-wider uppercase">
+                        {product.sku}
+                      </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-on-surface-variant text-[13px]">
+                  <td className="text-on-surface-variant px-6 py-4 text-[13px]">
                     {product.category?.name || 'Uncategorized'}
                   </td>
-                  <td className="px-6 py-4 text-right font-data-tabular text-[13px] text-primary">
+                  <td className="font-data-tabular text-primary px-6 py-4 text-right text-[13px]">
                     ₹ {Number(product.basePrice).toFixed(2)}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <span className={`font-data-tabular text-[13px] ${product.currentStock < product.lowerStockLimit ? 'text-error font-bold' : 'text-primary'}`}>
+                      <span
+                        className={`font-data-tabular text-[13px] ${product.currentStock < product.lowerStockLimit ? 'text-error font-bold' : 'text-primary'}`}
+                      >
                         {product.currentStock} {product.unit}
                       </span>
                       {product.currentStock < product.lowerStockLimit && (
-                        <span className="bg-error/10 text-error text-[10px] px-2 py-0.5 rounded uppercase font-bold tracking-tighter">Low</span>
+                        <span className="bg-error/10 text-error rounded px-2 py-0.5 text-[10px] font-bold tracking-tighter uppercase">
+                          Low
+                        </span>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     {product.isActive ? (
-                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-500/10 text-green-400">Active</span>
+                      <span className="inline-flex items-center rounded bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
+                        Active
+                      </span>
                     ) : (
-                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-outline-variant/20 text-outline">Inactive</span>
+                      <span className="bg-outline-variant/20 text-outline inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium">
+                        Inactive
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
+                    <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
                         onClick={() => openEditModal(product)}
-                        className="p-1.5 text-outline hover:text-primary transition-colors rounded-md"
+                        className="text-outline hover:text-primary rounded-md p-1.5 transition-colors"
                         title="Edit"
                       >
                         <span className="material-symbols-outlined text-[18px]">edit</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleDelete(product.id, product.name)}
-                        className="p-1.5 text-outline hover:text-error transition-colors rounded-md"
+                        className="text-outline hover:text-error rounded-md p-1.5 transition-colors"
                         title="Delete"
                       >
                         <span className="material-symbols-outlined text-[18px]">delete</span>
@@ -268,47 +313,62 @@ export default function ProductsPage() {
 
       {/* Add Product Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#1c1c1c] border-[0.5px] border-[#333] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-6">
+        <div className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
+          <div className="animate-in zoom-in-95 w-full max-w-md rounded-2xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6 shadow-2xl duration-200">
+            <div className="mb-6 flex items-center justify-between">
               <h3 className="font-headline-md text-headline-md text-primary">
                 {editingId ? 'Edit Product' : 'Add New Product'}
               </h3>
-              <button className="material-symbols-outlined text-outline hover:text-primary" onClick={() => setIsModalOpen(false)}>close</button>
+              <button
+                className="material-symbols-outlined text-outline hover:text-primary"
+                onClick={() => setIsModalOpen(false)}
+              >
+                close
+              </button>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Product Name</label>
-                <input 
-                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                  placeholder="e.g. Cyan Ink 1Ltr" 
-                  type="text" 
+                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                  Product Name
+                </label>
+                <input
+                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                  placeholder="e.g. Cyan Ink 1Ltr"
+                  type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
               </div>
               <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Category</label>
-                <select 
-                  className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                  Category
+                </label>
+                <select
+                  className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
                   value={formData.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                   required
                 >
-                  <option value="" disabled>Select a category</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  <option value="" disabled>
+                    Select a category
+                  </option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Base Price (₹)</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="0.00" 
-                    type="number" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    Base Price (₹)
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="0.00"
+                    type="number"
                     min="0"
                     step="0.01"
                     value={formData.basePrice}
@@ -317,9 +377,11 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Unit</label>
-                  <select 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    Unit
+                  </label>
+                  <select
+                    className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                   >
@@ -332,11 +394,13 @@ export default function ProductsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Low Stock Alert Level</label>
-                  <input 
-                    className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none" 
-                    placeholder="10" 
-                    type="number" 
+                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                    Low Stock Alert Level
+                  </label>
+                  <input
+                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                    placeholder="10"
+                    type="number"
                     min="0"
                     value={formData.lowerStockLimit}
                     onChange={(e) => setFormData({ ...formData, lowerStockLimit: e.target.value })}
@@ -345,11 +409,15 @@ export default function ProductsPage() {
                 </div>
                 {editingId && (
                   <div>
-                    <label className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Status</label>
-                    <select 
-                      className="w-full bg-[#141313] border-[0.5px] border-[#333] rounded-lg p-3 text-body-md text-primary focus:border-secondary-container outline-none appearance-none"
+                    <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
+                      Status
+                    </label>
+                    <select
+                      className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
                       value={formData.isActive.toString()}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, isActive: e.target.value === 'true' })
+                      }
                     >
                       <option value="true">Active</option>
                       <option value="false">Inactive</option>
@@ -357,9 +425,20 @@ export default function ProductsPage() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-4 pt-4 mt-6 border-t-[0.5px] border-[#333]">
-                <button className="flex-1 border-[0.5px] border-[#444] text-primary rounded-lg py-2.5 font-semibold hover:bg-[#252525] transition-all" onClick={() => setIsModalOpen(false)} type="button" disabled={isSubmitting}>Cancel</button>
-                <button className="flex-1 bg-primary text-background rounded-lg py-2.5 font-semibold hover:bg-opacity-90 transition-all disabled:opacity-50" type="submit" disabled={isSubmitting}>
+              <div className="mt-6 flex gap-4 border-t-[0.5px] border-[#333] pt-4">
+                <button
+                  className="text-primary flex-1 rounded-lg border-[0.5px] border-[#444] py-2.5 font-semibold transition-all hover:bg-[#252525]"
+                  onClick={() => setIsModalOpen(false)}
+                  type="button"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-primary text-background hover:bg-opacity-90 flex-1 rounded-lg py-2.5 font-semibold transition-all disabled:opacity-50"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
                 </button>
               </div>

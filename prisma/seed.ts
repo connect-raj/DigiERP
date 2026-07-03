@@ -78,7 +78,9 @@ async function main(): Promise<void> {
 
   // Fetch all categories to get their generated IDs
   const savedCategories = await prisma.category.findMany();
-  const categoryMap = new Map<string, string>(savedCategories.map((c: { name: string; id: string }) => [c.name, c.id]));
+  const categoryMap = new Map<string, string>(
+    savedCategories.map((c: { name: string; id: string }) => [c.name, c.id])
+  );
 
   console.log('Seeding products...');
 
