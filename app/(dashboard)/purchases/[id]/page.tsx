@@ -205,8 +205,9 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
               <button className="border-outline-variant text-on-surface hover:bg-surface-container-high flex h-10 w-10 items-center justify-center rounded-lg border-[0.5px] transition-colors">
                 <span className="material-symbols-outlined">more_vert</span>
               </button>
-              <div className="absolute top-12 right-0 z-10 hidden w-48 flex-col rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 shadow-xl group-hover:flex">
-                <a
+              <div className="absolute top-full right-0 z-10 hidden pt-2 group-hover:block">
+                <div className="flex w-48 flex-col rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 shadow-xl">
+                  <a
                   href={`mailto:${purchase.vendor.email || ''}?subject=Purchase Order ${purchase.purchaseNo}&body=Dear ${purchase.vendor.name},%0D%0A%0D%0APlease find attached the details for PO ${purchase.purchaseNo}.`}
                   className="text-on-surface-variant hover:bg-surface-container-high hover:text-primary flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
                 >
@@ -217,9 +218,9 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                   onClick={handleCancel}
                   className="hover:bg-error/10 text-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[18px]">cancel</span> Cancel
-                  Purchase
+                  <span className="material-symbols-outlined text-[18px]">cancel</span> Cancel Purchase
                 </button>
+                </div>
               </div>
             </div>
           )}

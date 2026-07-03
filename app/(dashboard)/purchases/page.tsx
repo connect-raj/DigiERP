@@ -315,16 +315,18 @@ export default function PurchasesPage() {
                         <button className="text-on-surface-variant hover:text-primary p-1 opacity-0 transition-opacity group-hover:opacity-100">
                           <span className="material-symbols-outlined">more_vert</span>
                         </button>
-                        <div className="absolute top-8 right-0 z-10 hidden w-40 flex-col rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 shadow-xl group-hover/menu:flex">
-                          <Link
-                            href={`/purchases/${purchase.id}`}
-                            className="text-on-surface-variant hover:bg-surface-container-high hover:text-primary flex items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">
-                              visibility
-                            </span>{' '}
-                            View
-                          </Link>
+                        <div className="absolute top-full right-0 z-10 hidden pt-2 group-hover/menu:block">
+                          <div className="flex w-40 flex-col rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 shadow-xl">
+                            <Link
+                              href={`/purchases/${purchase.id}`}
+                              className="text-on-surface-variant hover:bg-surface-container-high hover:text-primary flex items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">
+                                visibility
+                              </span>
+                              View
+                            </Link>
+                          </div>
                         </div>
                       </div>
                     </td>
