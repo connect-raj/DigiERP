@@ -208,18 +208,19 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
               <div className="absolute top-full right-0 z-10 hidden pt-2 group-hover:block">
                 <div className="flex w-48 flex-col rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 shadow-xl">
                   <a
-                  href={`mailto:${purchase.vendor.email || ''}?subject=Purchase Order ${purchase.purchaseNo}&body=Dear ${purchase.vendor.name},%0D%0A%0D%0APlease find attached the details for PO ${purchase.purchaseNo}.`}
-                  className="text-on-surface-variant hover:bg-surface-container-high hover:text-primary flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[18px]">mail</span> Email Vendor
-                </a>
-                <div className="bg-outline-variant/50 my-1 h-[0.5px] w-full"></div>
-                <button
-                  onClick={handleCancel}
-                  className="hover:bg-error/10 text-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[18px]">cancel</span> Cancel Purchase
-                </button>
+                    href={`mailto:${purchase.vendor.email || ''}?subject=Purchase Order ${purchase.purchaseNo}&body=Dear ${purchase.vendor.name},%0D%0A%0D%0APlease find attached the details for PO ${purchase.purchaseNo}.`}
+                    className="text-on-surface-variant hover:bg-surface-container-high hover:text-primary flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">mail</span> Email Vendor
+                  </a>
+                  <div className="bg-outline-variant/50 my-1 h-[0.5px] w-full"></div>
+                  <button
+                    onClick={handleCancel}
+                    className="hover:bg-error/10 text-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">cancel</span> Cancel
+                    Purchase
+                  </button>
                 </div>
               </div>
             </div>

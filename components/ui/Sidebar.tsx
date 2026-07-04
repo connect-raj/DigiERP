@@ -92,6 +92,20 @@ export default function Sidebar() {
               </span>
               <span className="text-[13px] font-medium">Purchases</span>
             </Link>
+            <Link
+              href="/dispatch-entries"
+              className={`flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 ${isRouteActive('/dispatch-entries') ? 'text-primary border-[0.5px] border-[#444] bg-[#2a2a2a]' : 'text-on-surface-variant hover:text-primary hover:bg-[#252525]'}`}
+            >
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={
+                  isRouteActive('/dispatch-entries') ? { fontVariationSettings: "'FILL' 1" } : {}
+                }
+              >
+                local_shipping
+              </span>
+              <span className="text-[13px] font-medium">Dispatch Entries</span>
+            </Link>
           </ul>
         </div>
       </div>
