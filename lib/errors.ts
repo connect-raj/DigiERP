@@ -4,7 +4,8 @@ export class AppError extends Error {
   constructor(
     public statusCode: number,
     message: string,
-    public code: string = 'INTERNAL_ERROR'
+    public code: string = 'INTERNAL_ERROR',
+    public details?: unknown
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -13,8 +14,8 @@ export class AppError extends Error {
 }
 
 export class BadRequestError extends AppError {
-  constructor(message = 'Bad Request', code = 'BAD_REQUEST') {
-    super(400, message, code);
+  constructor(message = 'Bad Request', code = 'BAD_REQUEST', details?: unknown) {
+    super(400, message, code, details);
   }
 }
 
