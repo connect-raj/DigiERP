@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { COMPANY_STATE } from '@/lib/constants';
 
 interface CategorySeed {
   name: string;
@@ -101,6 +102,25 @@ async function main(): Promise<void> {
   });
 
   console.log(`Seeded ${products.length} products (skipping duplicates).`);
+
+  console.log('Seeding settings...');
+
+  const existingSettings = await prisma.settings.findFirst();
+  if (!existingSettings) {
+    await prisma.settings.create({
+      data: {
+        companyName: 'DigiERP Ink Distributors',
+        companyAddress: 'Ahmedabad, Gujarat',
+        companyState: COMPANY_STATE,
+        companyGstin: '24AAAAA0000A1Z5',
+        companyPan: 'AAAAA0000A',
+      },
+    });
+    console.log('Seeded default settings row.');
+  } else {
+    console.log('Settings row already exists, skipping.');
+  }
+
   console.log('Seeding complete.');
 }
 

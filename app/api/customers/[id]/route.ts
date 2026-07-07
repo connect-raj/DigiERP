@@ -5,6 +5,13 @@ import { asyncHandler } from '@/lib/asyncHandler';
 export const GET = asyncHandler(
   async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
-    return customerController.getPrices(req, id);
+    return customerController.getById(req, id);
+  }
+);
+
+export const PUT = asyncHandler(
+  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+    return customerController.update(req, id);
   }
 );
