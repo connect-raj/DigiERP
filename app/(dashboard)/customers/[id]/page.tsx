@@ -4,6 +4,8 @@ import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CustomerFormDrawer, { Customer } from '../_components/CustomerFormDrawer';
+import RecordPaymentModal from '../../payments/_components/RecordPaymentModal';
+import AllocatePaymentsModal from '../../payments/_components/AllocatePaymentsModal';
 
 type CustomerPrice = {
   id: string;
@@ -31,6 +33,15 @@ type Invoice = {
   date: string;
   totalAmount: string | number;
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+};
+
+type Payment = {
+  id: string;
+  amount: string | number;
+  unallocatedAmount: string | number;
+  mode: string;
+  reference: string | null;
+  date: string;
 };
 
 function formatINR(val: string | number) {
@@ -68,18 +79,22 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [prices, setPrices] = useState<CustomerPrice[]>([]);
   const [dispatchEntries, setDispatchEntries] = useState<DispatchEntry[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [custRes, pricesRes, dispatchRes, invoicesRes] = await Promise.all([
+      const [custRes, pricesRes, dispatchRes, invoicesRes, paymentsRes] = await Promise.all([
         fetch(`/api/customers/${id}`),
         fetch(`/api/customers/${id}/prices`),
         fetch(`/api/dispatch-entries?customerId=${id}`),
         fetch(`/api/invoices?customerId=${id}`),
+        fetch(`/api/customers/${id}/payments`),
       ]);
 
       const custData = await custRes.json();
@@ -97,6 +112,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       const invoicesData = await invoicesRes.json();
       if (invoicesData.data) setInvoices(invoicesData.data.slice(0, 5));
+
+      const paymentsData = await paymentsRes.json();
+      if (paymentsData.data) setPayments(paymentsData.data.slice(0, 5));
     } catch (err) {
       console.error('Failed to load customer detail', err);
       setError('Failed to load customer detail.');
@@ -159,13 +177,29 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setIsDrawerOpen(true)}
-          className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition-colors hover:opacity-90"
-        >
-          <span className="material-symbols-outlined text-[18px]">edit</span>
-          Edit Customer
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsAllocateModalOpen(true)}
+            className="border-outline-variant text-on-surface hover:bg-surface-container-high font-body-md flex items-center gap-2 rounded-lg border-[0.5px] px-4 py-2 font-medium transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">sync_alt</span>
+            Allocate Payments
+          </button>
+          <button
+            onClick={() => setIsRecordModalOpen(true)}
+            className="bg-secondary text-on-secondary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition-colors hover:opacity-90"
+          >
+            <span className="material-symbols-outlined text-[18px]">payments</span>
+            Record Payment
+          </button>
+          <button
+            onClick={() => setIsDrawerOpen(true)}
+            className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition-colors hover:opacity-90"
+          >
+            <span className="material-symbols-outlined text-[18px]">edit</span>
+            Edit Customer
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -331,6 +365,56 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               </div>
             )}
           </div>
+
+          {/* Recent Payments */}
+          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
+            <div className="border-outline-variant flex items-center justify-between border-b-[0.5px] p-5">
+              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary">payments</span>
+                Recent Payments
+              </h2>
+              <Link
+                href={`/payments`}
+                className="text-secondary hover:text-primary text-[13px] font-medium transition-colors"
+              >
+                View All
+              </Link>
+            </div>
+            {payments.length === 0 ? (
+              <p className="text-on-surface-variant text-body-sm p-6 text-center">
+                No payments yet.
+              </p>
+            ) : (
+              <div className="divide-outline-variant/30 divide-y">
+                {payments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    onClick={() => router.push(`/payments/${payment.id}`)}
+                    className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-[#222]"
+                  >
+                    <div>
+                      <p className="text-body-md text-primary font-semibold">
+                        {payment.mode.replace('_', ' ')}
+                      </p>
+                      <p className="text-on-surface-variant text-[12px]">
+                        {formatDate(payment.date)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-data-tabular text-primary font-semibold">
+                        {formatINR(payment.amount)}
+                      </span>
+                      {Number(payment.unallocatedAmount) > 0 && (
+                        <span className="rounded-full bg-amber-400/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-400 uppercase">
+                          {formatINR(payment.unallocatedAmount)} unallocated
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column - Profile */}
@@ -371,6 +455,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 </span>
               </div>
               <div className="flex items-center justify-between text-[14px]">
+                <span className="text-on-surface-variant">Available Credit</span>
+                <span className="font-data-tabular text-secondary font-semibold">
+                  {formatINR(customer.creditBalance)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[14px]">
                 <span className="text-on-surface-variant">Credit Limit</span>
                 <span className="font-data-tabular text-primary">{formatINR(limit)}</span>
               </div>
@@ -395,6 +485,22 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         onClose={() => setIsDrawerOpen(false)}
         onSuccess={fetchData}
         editingCustomer={customer}
+      />
+
+      <RecordPaymentModal
+        isOpen={isRecordModalOpen}
+        onClose={() => setIsRecordModalOpen(false)}
+        onSuccess={fetchData}
+        lockedCustomerId={customer.id}
+        lockedCustomerName={customer.firmName}
+      />
+
+      <AllocatePaymentsModal
+        isOpen={isAllocateModalOpen}
+        onClose={() => setIsAllocateModalOpen(false)}
+        onSuccess={fetchData}
+        customerId={customer.id}
+        customerName={customer.firmName}
       />
     </div>
   );

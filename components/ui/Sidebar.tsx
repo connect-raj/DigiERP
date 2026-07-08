@@ -130,6 +130,18 @@ export default function Sidebar() {
               </span>
               <span className="text-[13px] font-medium">Invoices</span>
             </Link>
+            <Link
+              href="/payments"
+              className={`flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 ${isRouteActive('/payments') ? 'text-primary border-[0.5px] border-[#444] bg-[#2a2a2a]' : 'text-on-surface-variant hover:text-primary hover:bg-[#252525]'}`}
+            >
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={isRouteActive('/payments') ? { fontVariationSettings: "'FILL' 1" } : {}}
+              >
+                payments
+              </span>
+              <span className="text-[13px] font-medium">Payments</span>
+            </Link>
           </ul>
         </div>
       </div>

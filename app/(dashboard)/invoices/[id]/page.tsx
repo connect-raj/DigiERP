@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AllocatePaymentsModal from '../../payments/_components/AllocatePaymentsModal';
 
 type InvoiceItem = {
   id: string;
@@ -42,6 +43,18 @@ type Invoice = {
   items: InvoiceItem[];
 };
 
+type PaymentAllocation = {
+  id: string;
+  amount: string | number;
+  createdAt: string;
+  payment: {
+    id: string;
+    mode: string;
+    reference: string | null;
+    date: string;
+  };
+};
+
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -74,30 +87,38 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [allocations, setAllocations] = useState<PaymentAllocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
+
+  const fetchInvoice = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [invoiceRes, allocationsRes] = await Promise.all([
+        fetch(`/api/invoices/${id}`),
+        fetch(`/api/invoices/${id}/payments`),
+      ]);
+      const data = await invoiceRes.json();
+      if (!invoiceRes.ok || !data.data) {
+        setError(data.error?.message || 'Failed to load invoice');
+        return;
+      }
+      setInvoice(data.data);
+
+      const allocationsData = await allocationsRes.json();
+      if (allocationsData.data) setAllocations(allocationsData.data);
+    } catch (err) {
+      console.error('Failed to load invoice', err);
+      setError('Failed to load invoice.');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    const fetchInvoice = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/invoices/${id}`);
-        const data = await res.json();
-        if (!res.ok || !data.data) {
-          setError(data.error?.message || 'Failed to load invoice');
-        } else {
-          setInvoice(data.data);
-        }
-      } catch (err) {
-        console.error('Failed to load invoice', err);
-        setError('Failed to load invoice.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchInvoice();
-  }, [id]);
+  }, [fetchInvoice]);
 
   if (loading) {
     return (
@@ -161,6 +182,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <span className="material-symbols-outlined text-[18px]">download</span>
             Download PDF
           </a>
+          {invoice.paymentStatus !== 'PAID' && (
+            <button
+              onClick={() => setIsAllocateModalOpen(true)}
+              className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold shadow-sm transition-all hover:opacity-90"
+            >
+              <span className="material-symbols-outlined text-[18px]">sync_alt</span>
+              Allocate Payment
+            </button>
+          )}
         </div>
       </div>
 
@@ -237,6 +267,46 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Payment Allocations */}
+          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
+            <div className="border-outline-variant border-b-[0.5px] p-5">
+              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary">sync_alt</span>
+                Payment Allocations
+              </h2>
+            </div>
+            {allocations.length === 0 ? (
+              <p className="text-on-surface-variant text-body-sm p-6 text-center">
+                No payments have been allocated to this invoice yet.
+              </p>
+            ) : (
+              <div className="divide-outline-variant/30 divide-y">
+                {allocations.map((allocation) => (
+                  <div
+                    key={allocation.id}
+                    className="flex items-center justify-between p-4 transition-colors hover:bg-[#222]"
+                  >
+                    <div>
+                      <Link
+                        href={`/payments/${allocation.payment.id}`}
+                        className="text-body-md text-primary font-semibold hover:underline"
+                      >
+                        {allocation.payment.mode.replace('_', ' ')}
+                        {allocation.payment.reference ? ` · ${allocation.payment.reference}` : ''}
+                      </Link>
+                      <p className="text-on-surface-variant text-[12px]">
+                        {formatDate(allocation.createdAt)}
+                      </p>
+                    </div>
+                    <span className="font-data-tabular text-secondary font-semibold">
+                      {formatINR(allocation.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -357,6 +427,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       </div>
+
+      <AllocatePaymentsModal
+        isOpen={isAllocateModalOpen}
+        onClose={() => setIsAllocateModalOpen(false)}
+        onSuccess={fetchInvoice}
+        customerId={invoice.customer.id}
+        customerName={invoice.customer.firmName}
+        initialInvoiceId={invoice.id}
+      />
     </div>
   );
 }
