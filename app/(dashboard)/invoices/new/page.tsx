@@ -13,17 +13,14 @@ type DispatchEntryOption = {
 type DispatchEntryItem = {
   id: string;
   productId: string;
+  productName: string;
+  categoryName: string;
   quantity: string | number;
   price: string | number;
   cgst: string | number;
   sgst: string | number;
   igst: string | number;
   lineTotal: string | number;
-  product: {
-    name: string;
-    unit: string;
-    category: { name: string; gstRate: string | number };
-  };
 };
 
 type DispatchEntry = {
@@ -369,13 +366,11 @@ function CreateInvoiceContent() {
                   return (
                     <tr key={item.id} className="border-outline-variant/30 border-b-[0.5px]">
                       <td className="px-2 py-3">
-                        <p className="text-primary font-medium">{item.product.name}</p>
-                        <p className="text-on-surface-variant text-[11px]">
-                          {item.product.category.name}
-                        </p>
+                        <p className="text-primary font-medium">{item.productName}</p>
+                        <p className="text-on-surface-variant text-[11px]">{item.categoryName}</p>
                       </td>
                       <td className="font-data-tabular px-2 py-3 text-right">
-                        {Number(item.quantity)} {item.product.unit}
+                        {Number(item.quantity)} LTR
                       </td>
                       <td className="font-data-tabular px-2 py-3 text-right">
                         {formatINR(item.price)}

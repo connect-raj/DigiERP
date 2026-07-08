@@ -64,6 +64,7 @@ export class DispatchEntryController {
           }
         : null,
       stockTransactions: stockTxns.map((txn) => ({
+        id: txn.id,
         productId: txn.productId,
         productName: txn.product.name,
         changeQty: txn.changeQty,
