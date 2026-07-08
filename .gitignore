@@ -48,3 +48,6 @@ next-env.d.ts
 
 # context
 context.txt
+
+# claude code local settings
+.claude/settings.local.json

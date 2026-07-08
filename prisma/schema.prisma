@@ -27,6 +27,7 @@ model User {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   vendorPayments    VendorPayment[]
+  payments          Payment[]
   stockTransactions StockTransaction[]
 }
 
@@ -151,6 +152,7 @@ model Customer {
   phone              String?
   email              String?
   outstandingBalance Decimal  @default(0) @db.Decimal(12, 2)
+  creditBalance      Decimal  @default(0) @db.Decimal(12, 2)
   creditLimit        Decimal  @default(0) @db.Decimal(12, 2)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -159,6 +161,7 @@ model Customer {
   priceHistories  PriceHistory[]
   dispatchEntries DispatchEntry[]
   invoices        Invoice[]
+  payments        Payment[]
 }
 
 model DispatchEntry {
@@ -217,9 +220,10 @@ model Invoice {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  dispatchEntry DispatchEntry @relation(fields: [dispatchEntryId], references: [id])
-  customer      Customer      @relation(fields: [customerId], references: [id])
-  items         InvoiceItem[]
+  dispatchEntry      DispatchEntry       @relation(fields: [dispatchEntryId], references: [id])
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  items              InvoiceItem[]
+  paymentAllocations PaymentAllocation[]
 }
 
 model InvoiceItem {
@@ -293,6 +297,43 @@ model VendorPayment {
   vendor     Vendor    @relation(fields: [vendorId], references: [id])
   purchase   Purchase? @relation(fields: [purchaseId], references: [id])
   recordedBy User?     @relation(fields: [recordedById], references: [id])
+}
+
+model Payment {
+  id                String      @id @default(uuid())
+  customerId        String
+  amount            Decimal     @db.Decimal(12, 2)
+  unallocatedAmount Decimal     @db.Decimal(12, 2)
+  mode              PaymentMode @default(BANK_TRANSFER)
+  reference         String?
+  date              DateTime
+  recordedById      String?
+  createdAt         DateTime    @default(now())
+
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  recordedBy  User?               @relation(fields: [recordedById], references: [id])
+  allocations PaymentAllocation[]
+}
+
+model AllocationBatch {
+  id             String   @id @default(uuid())
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  allocations PaymentAllocation[]
+}
+
+model PaymentAllocation {
+  id        String   @id @default(uuid())
+  paymentId String
+  invoiceId String
+  batchId   String
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  payment Payment         @relation(fields: [paymentId], references: [id])
+  invoice Invoice         @relation(fields: [invoiceId], references: [id])
+  batch   AllocationBatch @relation(fields: [batchId], references: [id])
 }
 
 enum PaymentStatus {
