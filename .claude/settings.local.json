@@ -40,7 +40,11 @@
       "Bash(echo \"launched pid $!\")",
       "Bash(fuser -k 3000/tcp)",
       "Bash(npm ls *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(git diff *)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; cat {}')",
+      "Bash(npm -v)",
+      "Bash(kill %1)"
     ]
   }
 }
