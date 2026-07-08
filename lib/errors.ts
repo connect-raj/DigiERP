@@ -44,8 +44,8 @@ export class InternalServerError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = 'Conflict', code = 'CONFLICT') {
-    super(409, message, code);
+  constructor(message = 'Conflict', code = 'CONFLICT', details?: unknown) {
+    super(409, message, code, details);
   }
 }
 

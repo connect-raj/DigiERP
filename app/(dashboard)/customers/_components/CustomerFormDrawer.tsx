@@ -13,6 +13,7 @@ export type Customer = {
   phone?: string | null;
   email?: string | null;
   outstandingBalance: string | number;
+  creditBalance: string | number;
   creditLimit: string | number;
 };
 
@@ -194,8 +195,14 @@ export default function CustomerFormDrawer({
                     {formatINR(editingCustomer.outstandingBalance)}
                   </span>
                 </p>
+                <p className="text-body-md text-on-surface-variant mt-1">
+                  Available Credit:{' '}
+                  <span className="text-secondary font-bold">
+                    {formatINR(editingCustomer.creditBalance)}
+                  </span>
+                </p>
                 <p className="text-on-surface-variant mt-1 text-[12px] opacity-70">
-                  Updated automatically from invoices — not editable here.
+                  Updated automatically from invoices and payments — not editable here.
                 </p>
               </div>
             )}
