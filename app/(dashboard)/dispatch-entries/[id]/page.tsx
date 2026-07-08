@@ -123,9 +123,9 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
     }
   };
 
-  const handleGenerateInvoice = async () => {
-    // Generate Invoice handler (Mock / placeholder behavior)
-    alert('Invoice generation triggered. Generating invoice for Challan ' + entry?.challanNo);
+  const handleGenerateInvoice = () => {
+    if (!entry) return;
+    router.push(`/invoices/new?dispatchEntryId=${entry.id}`);
   };
 
   // Indian format helper for currency
@@ -262,7 +262,7 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
           <button
-            onClick={() => alert('Viewing Invoice detail for ' + entry.invoice?.invoiceNo)}
+            onClick={() => router.push(`/invoices/${entry.invoice?.id}`)}
             className="bg-surface-container border-outline-variant text-body-sm rounded-lg border-[0.5px] px-4 py-2 font-semibold transition-colors hover:bg-[#252525]"
           >
             View Invoice

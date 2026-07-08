@@ -81,6 +81,18 @@ export default function Sidebar() {
               <span className="text-[13px] font-medium">Vendors</span>
             </Link>
             <Link
+              href="/customers"
+              className={`flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 ${isRouteActive('/customers') ? 'text-primary border-[0.5px] border-[#444] bg-[#2a2a2a]' : 'text-on-surface-variant hover:text-primary hover:bg-[#252525]'}`}
+            >
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={isRouteActive('/customers') ? { fontVariationSettings: "'FILL' 1" } : {}}
+              >
+                groups
+              </span>
+              <span className="text-[13px] font-medium">Customers</span>
+            </Link>
+            <Link
               href="/purchases"
               className={`flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 ${isRouteActive('/purchases') ? 'text-primary border-[0.5px] border-[#444] bg-[#2a2a2a]' : 'text-on-surface-variant hover:text-primary hover:bg-[#252525]'}`}
             >
@@ -105,6 +117,18 @@ export default function Sidebar() {
                 local_shipping
               </span>
               <span className="text-[13px] font-medium">Dispatch Entries</span>
+            </Link>
+            <Link
+              href="/invoices"
+              className={`flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 ${isRouteActive('/invoices') ? 'text-primary border-[0.5px] border-[#444] bg-[#2a2a2a]' : 'text-on-surface-variant hover:text-primary hover:bg-[#252525]'}`}
+            >
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={isRouteActive('/invoices') ? { fontVariationSettings: "'FILL' 1" } : {}}
+              >
+                receipt_long
+              </span>
+              <span className="text-[13px] font-medium">Invoices</span>
             </Link>
           </ul>
         </div>
