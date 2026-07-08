@@ -21,9 +21,6 @@ type DispatchEntryItem = {
   categoryName: string;
   quantity: string | number;
   price: string | number;
-  cgst: string | number;
-  sgst: string | number;
-  igst: string | number;
   lineTotal: string | number;
 };
 
@@ -33,14 +30,12 @@ type DispatchEntry = {
   customerId: string;
   place: string;
   transport?: string | null;
+  transportAmount?: string | number | null;
   date: string;
   entryDate: string;
   status: 'PENDING_BILLING' | 'BILLED';
   isCancelled: boolean;
   totalAmount: string | number;
-  totalCgst: string | number;
-  totalSgst: string | number;
-  totalIgst: string | number;
   customer: {
     id: string;
     firmName: string;
@@ -323,6 +318,16 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
               </span>
               <span>{entry.transport || 'Self Delivery / Local pickup'}</span>
             </div>
+            {entry.transportAmount != null && Number(entry.transportAmount) > 0 && (
+              <div>
+                <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
+                  Transport Amount
+                </span>
+                <span className="text-primary font-semibold">
+                  {formatINR(entry.transportAmount)}
+                </span>
+              </div>
+            )}
             <div>
               <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
                 Dispatch Date
@@ -357,15 +362,6 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                 <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 text-right tracking-wider uppercase">
                   Price
                 </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 text-right tracking-wider uppercase">
-                  CGST
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 text-right tracking-wider uppercase">
-                  SGST
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 text-right tracking-wider uppercase">
-                  IGST
-                </th>
                 <th className="font-label-caps text-label-caps text-on-surface-variant pb-3 text-right tracking-wider uppercase">
                   Line Total
                 </th>
@@ -388,15 +384,6 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                   <td className="font-data-tabular py-3 pr-4 text-right font-medium">
                     {formatINR(item.price)}
                   </td>
-                  <td className="text-on-surface-variant font-data-tabular py-3 pr-4 text-right">
-                    {Number(item.cgst) > 0 ? formatINR(item.cgst) : '—'}
-                  </td>
-                  <td className="text-on-surface-variant font-data-tabular py-3 pr-4 text-right">
-                    {Number(item.sgst) > 0 ? formatINR(item.sgst) : '—'}
-                  </td>
-                  <td className="text-on-surface-variant font-data-tabular py-3 pr-4 text-right">
-                    {Number(item.igst) > 0 ? formatINR(item.igst) : '—'}
-                  </td>
                   <td className="text-primary font-data-tabular py-3 text-right font-semibold">
                     {formatINR(item.lineTotal)}
                   </td>
@@ -408,22 +395,10 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
 
         {/* Summary Block */}
         <div className="mt-6 flex flex-col items-end gap-2 border-t border-[#2e2e2e] pt-6 text-right">
-          {Number(entry.totalCgst) > 0 && (
+          {entry.transportAmount != null && Number(entry.transportAmount) > 0 && (
             <div className="text-body-sm text-on-surface-variant">
-              Total CGST:{' '}
-              <span className="text-primary font-semibold">{formatINR(entry.totalCgst)}</span>
-            </div>
-          )}
-          {Number(entry.totalSgst) > 0 && (
-            <div className="text-body-sm text-on-surface-variant">
-              Total SGST:{' '}
-              <span className="text-primary font-semibold">{formatINR(entry.totalSgst)}</span>
-            </div>
-          )}
-          {Number(entry.totalIgst) > 0 && (
-            <div className="text-body-sm text-on-surface-variant">
-              Total IGST:{' '}
-              <span className="text-primary font-semibold">{formatINR(entry.totalIgst)}</span>
+              Transport:{' '}
+              <span className="text-primary font-semibold">{formatINR(entry.transportAmount)}</span>
             </div>
           )}
           <div className="my-1 h-[1px] w-48 bg-[#2e2e2e]"></div>

@@ -140,28 +140,7 @@ describe('DispatchEntryService', () => {
       );
     });
 
-    it('splits GST into CGST/SGST when customer state matches company state', async () => {
-      vi.spyOn(dispatchEntryRepository, 'findCustomerById').mockResolvedValue(
-        gujaratCustomer as never
-      );
-      vi.spyOn(dispatchEntryRepository, 'findProductsByIds').mockResolvedValue([product as never]);
-      vi.spyOn(dispatchEntryRepository, 'findCustomerPrices').mockResolvedValue([]);
-      vi.spyOn(dispatchEntryRepository, 'createWithStockDecrement').mockResolvedValue({
-        id: 'entry-1',
-      } as never);
-
-      await dispatchEntryService.create(baseInput);
-
-      expect(dispatchEntryRepository.createWithStockDecrement).toHaveBeenCalledWith(
-        expect.objectContaining({
-          totalCgst: 45,
-          totalSgst: 45,
-          totalIgst: 0,
-        })
-      );
-    });
-
-    it('uses IGST when customer state differs from company state', async () => {
+    it('computes totalAmount as pre-tax price times quantity, regardless of customer state', async () => {
       vi.spyOn(dispatchEntryRepository, 'findCustomerById').mockResolvedValue({
         ...gujaratCustomer,
         state: 'Maharashtra',
@@ -176,10 +155,35 @@ describe('DispatchEntryService', () => {
 
       expect(dispatchEntryRepository.createWithStockDecrement).toHaveBeenCalledWith(
         expect.objectContaining({
-          totalCgst: 0,
-          totalSgst: 0,
-          totalIgst: 90,
+          totalAmount: 500,
+          items: [expect.objectContaining({ price: 100, lineTotal: 500 })],
         })
+      );
+      const call = vi.mocked(dispatchEntryRepository.createWithStockDecrement).mock.calls[0][0];
+      expect(call).not.toHaveProperty('totalCgst');
+      expect(call).not.toHaveProperty('totalSgst');
+      expect(call).not.toHaveProperty('totalIgst');
+      expect(call.items[0]).not.toHaveProperty('cgst');
+    });
+
+    it('passes transportAmount through when provided, and omits it otherwise', async () => {
+      vi.spyOn(dispatchEntryRepository, 'findCustomerById').mockResolvedValue(
+        gujaratCustomer as never
+      );
+      vi.spyOn(dispatchEntryRepository, 'findProductsByIds').mockResolvedValue([product as never]);
+      vi.spyOn(dispatchEntryRepository, 'findCustomerPrices').mockResolvedValue([]);
+      vi.spyOn(dispatchEntryRepository, 'createWithStockDecrement').mockResolvedValue({
+        id: 'entry-1',
+      } as never);
+
+      await dispatchEntryService.create({ ...baseInput, transportAmount: 250 });
+      expect(dispatchEntryRepository.createWithStockDecrement).toHaveBeenCalledWith(
+        expect.objectContaining({ transportAmount: 250 })
+      );
+
+      await dispatchEntryService.create(baseInput);
+      expect(dispatchEntryRepository.createWithStockDecrement).toHaveBeenCalledWith(
+        expect.objectContaining({ transportAmount: undefined })
       );
     });
 

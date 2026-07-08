@@ -5,8 +5,6 @@ import {
   DispatchLineItemInput,
 } from '@/repositories/dispatch-entry.repository';
 import { NotFoundError, BadRequestError } from '@/lib/errors';
-import { determineGstType } from '@/lib/gst';
-import { COMPANY_STATE } from '@/lib/constants';
 import { CreateDispatchEntryInput } from '@/validations/dispatch-entry';
 
 export interface CreditLimitWarning {
@@ -48,42 +46,19 @@ export class DispatchEntryService {
     );
     const customerPriceMap = new Map(customerPrices.map((cp) => [cp.productId, Number(cp.price)]));
 
-    const gstType = determineGstType(COMPANY_STATE, customer.state);
-
     let totalAmount = 0;
-    let totalCgst = 0;
-    let totalSgst = 0;
-    let totalIgst = 0;
 
     const items: DispatchLineItemInput[] = data.items.map((item) => {
       const product = productMap.get(item.productId)!;
       const price = item.price ?? customerPriceMap.get(item.productId) ?? Number(product.basePrice);
-      const gstRate = Number(product.category.gstRate);
-      const baseTotal = price * item.quantity;
-
-      let cgst = 0;
-      let sgst = 0;
-      let igst = 0;
-      if (gstType === 'CGST_SGST') {
-        cgst = (baseTotal * (gstRate / 2)) / 100;
-        sgst = (baseTotal * (gstRate / 2)) / 100;
-      } else {
-        igst = (baseTotal * gstRate) / 100;
-      }
-      const lineTotal = baseTotal + cgst + sgst + igst;
+      const lineTotal = price * item.quantity;
 
       totalAmount += lineTotal;
-      totalCgst += cgst;
-      totalSgst += sgst;
-      totalIgst += igst;
 
       return {
         productId: item.productId,
         quantity: item.quantity,
         price,
-        cgst,
-        sgst,
-        igst,
         lineTotal,
       };
     });
@@ -95,11 +70,9 @@ export class DispatchEntryService {
         customerId: data.customerId,
         place: data.place,
         transport: data.transport,
+        transportAmount: data.transportAmount,
         date: new Date(data.date),
         totalAmount,
-        totalCgst,
-        totalSgst,
-        totalIgst,
         items,
       });
     } catch (error) {

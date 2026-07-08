@@ -17,9 +17,6 @@ type DispatchEntryItem = {
   categoryName: string;
   quantity: string | number;
   price: string | number;
-  cgst: string | number;
-  sgst: string | number;
-  igst: string | number;
   lineTotal: string | number;
 };
 
@@ -28,13 +25,11 @@ type DispatchEntry = {
   challanNo: string;
   place: string;
   transport?: string | null;
+  transportAmount?: string | number | null;
   date: string;
   status: 'PENDING_BILLING' | 'BILLED';
   isCancelled: boolean;
   totalAmount: string | number;
-  totalCgst: string | number;
-  totalSgst: string | number;
-  totalIgst: string | number;
   customer: {
     id: string;
     firmName: string;
@@ -312,12 +307,20 @@ function CreateInvoiceContent() {
                 </span>
                 <span className="text-primary">{entry.place}</span>
               </div>
+              {entry.transportAmount != null && Number(entry.transportAmount) > 0 && (
+                <div>
+                  <span className="font-label-caps text-label-caps text-on-surface-variant block uppercase">
+                    Transport Amount
+                  </span>
+                  <span className="text-primary">{formatINR(entry.transportAmount)}</span>
+                </div>
+              )}
               <div>
                 <span className="font-label-caps text-label-caps text-on-surface-variant block uppercase">
-                  GST Type
+                  GST
                 </span>
-                <span className="text-primary">
-                  {Number(entry.totalIgst) > 0 ? 'IGST (Inter-state)' : 'CGST + SGST (Intra-state)'}
+                <span className="text-on-surface-variant">
+                  Calculated automatically on generation
                 </span>
               </div>
               <div className="flex flex-col gap-2">
@@ -353,37 +356,28 @@ function CreateInvoiceContent() {
                     Price
                   </th>
                   <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
-                    Tax
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
                     Total
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {entry.items.map((item) => {
-                  const tax = Number(item.cgst) + Number(item.sgst) + Number(item.igst);
-                  return (
-                    <tr key={item.id} className="border-outline-variant/30 border-b-[0.5px]">
-                      <td className="px-2 py-3">
-                        <p className="text-primary font-medium">{item.productName}</p>
-                        <p className="text-on-surface-variant text-[11px]">{item.categoryName}</p>
-                      </td>
-                      <td className="font-data-tabular px-2 py-3 text-right">
-                        {Number(item.quantity)} LTR
-                      </td>
-                      <td className="font-data-tabular px-2 py-3 text-right">
-                        {formatINR(item.price)}
-                      </td>
-                      <td className="font-data-tabular px-2 py-3 text-right">
-                        {tax > 0 ? formatINR(tax) : '—'}
-                      </td>
-                      <td className="font-data-tabular text-primary px-2 py-3 text-right font-semibold">
-                        {formatINR(item.lineTotal)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {entry.items.map((item) => (
+                  <tr key={item.id} className="border-outline-variant/30 border-b-[0.5px]">
+                    <td className="px-2 py-3">
+                      <p className="text-primary font-medium">{item.productName}</p>
+                      <p className="text-on-surface-variant text-[11px]">{item.categoryName}</p>
+                    </td>
+                    <td className="font-data-tabular px-2 py-3 text-right">
+                      {Number(item.quantity)} LTR
+                    </td>
+                    <td className="font-data-tabular px-2 py-3 text-right">
+                      {formatINR(item.price)}
+                    </td>
+                    <td className="font-data-tabular text-primary px-2 py-3 text-right font-semibold">
+                      {formatINR(item.lineTotal)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -394,37 +388,16 @@ function CreateInvoiceContent() {
           <div className="bg-surface-container border-outline-variant sticky top-6 rounded-2xl border-[0.5px] p-6">
             <h2 className="font-title-md text-title-md text-primary mb-6">Totals</h2>
             <div className="flex flex-col gap-4">
-              {Number(entry.totalCgst) > 0 && (
-                <div className="text-body-md flex items-center justify-between">
-                  <span className="text-on-surface-variant">CGST</span>
-                  <span className="text-primary font-data-tabular">
-                    {formatINR(entry.totalCgst)}
-                  </span>
-                </div>
-              )}
-              {Number(entry.totalSgst) > 0 && (
-                <div className="text-body-md flex items-center justify-between">
-                  <span className="text-on-surface-variant">SGST</span>
-                  <span className="text-primary font-data-tabular">
-                    {formatINR(entry.totalSgst)}
-                  </span>
-                </div>
-              )}
-              {Number(entry.totalIgst) > 0 && (
-                <div className="text-body-md flex items-center justify-between">
-                  <span className="text-on-surface-variant">IGST</span>
-                  <span className="text-primary font-data-tabular">
-                    {formatINR(entry.totalIgst)}
-                  </span>
-                </div>
-              )}
-              <div className="border-outline-variant my-2 border-t-[0.5px]"></div>
               <div className="flex items-center justify-between">
-                <span className="font-title-md text-title-md text-primary">Grand Total</span>
+                <span className="font-title-md text-title-md text-primary">Product Total</span>
                 <span className="font-display text-secondary font-data-tabular text-[24px] font-bold">
                   {formatINR(entry.totalAmount)}
                 </span>
               </div>
+              <p className="text-on-surface-variant text-[11px]">
+                GST will be calculated automatically based on the customer&apos;s location and added
+                to the invoice total.
+              </p>
             </div>
 
             <div className="mt-8 flex flex-col gap-3">
@@ -471,12 +444,16 @@ function CreateInvoiceContent() {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-on-surface-variant">Grand Total</span>
+                <span className="text-on-surface-variant">Product Total</span>
                 <span className="text-primary font-data-tabular font-semibold">
                   {formatINR(entry.totalAmount)}
                 </span>
               </div>
             </div>
+            <p className="text-on-surface-variant/80 mt-1 text-[11px]">
+              GST will be added automatically -- the invoice total may be higher than the product
+              total shown above.
+            </p>
             <div className="mt-2 flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowConfirm(false)}

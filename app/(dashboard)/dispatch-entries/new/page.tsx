@@ -16,7 +16,6 @@ type Customer = {
 type Category = {
   id: string;
   name: string;
-  gstRate: string | number;
 };
 
 type Product = {
@@ -48,6 +47,7 @@ export default function NewDispatchEntryPage() {
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [place, setPlace] = useState('');
   const [transport, setTransport] = useState('');
+  const [transportAmount, setTransportAmount] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
   // Customer Prices mapping
@@ -193,64 +193,28 @@ export default function NewDispatchEntryPage() {
   }, [products]);
 
   // Computations
-  const gstType = useMemo(() => {
-    if (!selectedCustomer) return 'CGST_SGST';
-    return selectedCustomer.state.trim().toLowerCase() === 'gujarat' ? 'CGST_SGST' : 'IGST';
-  }, [selectedCustomer]);
-
   const computedItems = useMemo(() => {
     return lineItems.map((item) => {
       const prod = products.find((p) => p.id === item.productId);
-      const gstRate = prod ? Number(prod.category.gstRate) : 0;
-      const baseTotal = item.quantity * item.price;
+      const lineTotal = item.quantity * item.price;
       const availableStock = prod ? Number(prod.currentStock) : 0;
       const insufficient = item.productId ? item.quantity > availableStock : false;
 
-      let cgst = 0;
-      let sgst = 0;
-      let igst = 0;
-
-      if (gstType === 'CGST_SGST') {
-        cgst = (baseTotal * (gstRate / 2)) / 100;
-        sgst = (baseTotal * (gstRate / 2)) / 100;
-      } else {
-        igst = (baseTotal * gstRate) / 100;
-      }
-
-      const lineTotal = baseTotal + cgst + sgst + igst;
-
       return {
         ...item,
-        gstRate,
-        cgst,
-        sgst,
-        igst,
         lineTotal,
         availableStock,
         insufficient,
       };
     });
-  }, [lineItems, products, gstType]);
+  }, [lineItems, products]);
 
   const totals = useMemo(() => {
     let totalAmount = 0;
-    let totalCgst = 0;
-    let totalSgst = 0;
-    let totalIgst = 0;
-
     computedItems.forEach((item) => {
       totalAmount += item.lineTotal;
-      totalCgst += item.cgst;
-      totalSgst += item.sgst;
-      totalIgst += item.igst;
     });
-
-    return {
-      totalAmount,
-      totalCgst,
-      totalSgst,
-      totalIgst,
-    };
+    return { totalAmount };
   }, [computedItems]);
 
   // Validation
@@ -297,6 +261,7 @@ export default function NewDispatchEntryPage() {
           date: new Date(date).toISOString(),
           place,
           transport: transport || undefined,
+          transportAmount: transportAmount ? Number(transportAmount) : undefined,
           items: lineItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
@@ -412,7 +377,7 @@ export default function NewDispatchEntryPage() {
 
       {/* Top Details Grid */}
       <div className="bg-surface-container border-outline-variant rounded-xl border-[0.5px] p-6">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-5">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3 xl:grid-cols-6">
           {/* Challan No */}
           <div className="flex flex-col gap-1.5">
             <label className="text-body-sm text-on-surface-variant font-medium">
@@ -496,6 +461,25 @@ export default function NewDispatchEntryPage() {
               className="bg-surface-container-low border-outline-variant text-body-md text-on-surface focus:border-secondary rounded-lg border-[0.5px] px-3.5 py-2 transition-colors outline-none"
             />
           </div>
+
+          {/* Transport Amount */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-body-sm text-on-surface-variant font-medium">
+              Transport Amount (₹)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Optional"
+              value={transportAmount}
+              onChange={(e) => setTransportAmount(e.target.value)}
+              className="bg-surface-container-low border-outline-variant text-body-md text-on-surface focus:border-secondary rounded-lg border-[0.5px] px-3.5 py-2 transition-colors outline-none"
+            />
+            <span className="text-on-surface-variant/70 text-[11px]">
+              Paid to the transport company, if applicable. Not part of the product total.
+            </span>
+          </div>
         </div>
       </div>
 
@@ -519,9 +503,6 @@ export default function NewDispatchEntryPage() {
                 <th className="font-label-caps text-label-caps text-on-surface-variant w-36 pr-4 pb-3 tracking-wider uppercase">
                   Price (₹)
                 </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant w-40 pr-4 pb-3 tracking-wider uppercase">
-                  GST Details
-                </th>
                 <th className="font-label-caps text-label-caps text-on-surface-variant w-36 pb-3 text-right tracking-wider uppercase">
                   Line Total
                 </th>
@@ -531,7 +512,7 @@ export default function NewDispatchEntryPage() {
             <tbody className="divide-outline-variant/20 divide-y">
               {lineItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-on-surface-variant py-8 text-center">
+                  <td colSpan={6} className="text-on-surface-variant py-8 text-center">
                     No products added yet. Click &quot;+ Add Product&quot; to record dispatch line
                     items.
                   </td>
@@ -649,24 +630,6 @@ export default function NewDispatchEntryPage() {
                         </div>
                       </td>
 
-                      {/* GST Split */}
-                      <td className="text-body-sm text-on-surface-variant py-3 pr-4 font-medium">
-                        {item.productId ? (
-                          <div className="flex flex-col">
-                            <span>Rate: {item.gstRate}%</span>
-                            {gstType === 'CGST_SGST' ? (
-                              <span className="text-[11px]">
-                                CGST: {formatINR(item.cgst)} | SGST: {formatINR(item.sgst)}
-                              </span>
-                            ) : (
-                              <span className="text-[11px]">IGST: {formatINR(item.igst)}</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-on-surface-variant/40">—</span>
-                        )}
-                      </td>
-
                       {/* Line Total */}
                       <td className="text-primary py-3 text-right font-semibold">
                         {item.productId ? formatINR(item.lineTotal) : formatINR(0)}
@@ -701,22 +664,12 @@ export default function NewDispatchEntryPage() {
       {/* Sticky Bottom Footer */}
       <div className="fixed right-0 bottom-0 left-[260px] z-40 flex items-center justify-between border-t border-[#2e2e2e] bg-[#1e1e1e] px-10 py-4 shadow-2xl">
         <div className="flex items-center gap-6">
-          {totals.totalCgst > 0 && (
+          {Number(transportAmount) > 0 && (
             <div className="text-body-sm text-on-surface-variant">
-              Total CGST:{' '}
-              <span className="text-primary font-semibold">{formatINR(totals.totalCgst)}</span>
-            </div>
-          )}
-          {totals.totalSgst > 0 && (
-            <div className="text-body-sm text-on-surface-variant">
-              Total SGST:{' '}
-              <span className="text-primary font-semibold">{formatINR(totals.totalSgst)}</span>
-            </div>
-          )}
-          {totals.totalIgst > 0 && (
-            <div className="text-body-sm text-on-surface-variant">
-              Total IGST:{' '}
-              <span className="text-primary font-semibold">{formatINR(totals.totalIgst)}</span>
+              Transport:{' '}
+              <span className="text-primary font-semibold">
+                {formatINR(Number(transportAmount))}
+              </span>
             </div>
           )}
           <div className="h-6 w-[1px] bg-[#2e2e2e]"></div>
