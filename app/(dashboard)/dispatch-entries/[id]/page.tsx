@@ -11,27 +11,20 @@ type StockTransaction = {
   stockAfter: string | number;
   reason: string;
   createdAt: string;
-  product: {
-    name: string;
-  };
+  productName: string;
 };
 
 type DispatchEntryItem = {
   id: string;
   productId: string;
+  productName: string;
+  categoryName: string;
   quantity: string | number;
   price: string | number;
   cgst: string | number;
   sgst: string | number;
   igst: string | number;
   lineTotal: string | number;
-  product: {
-    name: string;
-    category: {
-      name: string;
-      gstRate: string | number;
-    };
-  };
 };
 
 type DispatchEntry = {
@@ -383,10 +376,10 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                 <tr key={item.id} className="py-3">
                   <td className="py-3 pr-4">
                     <span className="text-body-md text-primary block font-semibold">
-                      {item.product.name}
+                      {item.productName}
                     </span>
                     <span className="text-on-surface-variant text-[11px]">
-                      Category: {item.product.category.name}
+                      Category: {item.categoryName}
                     </span>
                   </td>
                   <td className="font-data-tabular py-3 pr-4 text-right font-medium">
@@ -486,7 +479,7 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                   <tbody className="divide-y divide-[#2e2e2e]/50">
                     {entry.stockTransactions.map((txn) => (
                       <tr key={txn.id} className="py-2">
-                        <td className="text-primary py-2.5 font-semibold">{txn.product.name}</td>
+                        <td className="text-primary py-2.5 font-semibold">{txn.productName}</td>
                         <td
                           className={`font-data-tabular py-2.5 text-right font-semibold ${
                             Number(txn.changeQty) < 0 ? 'text-red-400' : 'text-green-400'
@@ -538,7 +531,7 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                   key={item.id}
                   className="text-body-sm flex items-center justify-between font-medium"
                 >
-                  <span className="text-primary">{item.product.name}</span>
+                  <span className="text-primary">{item.productName}</span>
                   <span className="font-data-tabular flex items-center gap-1 font-semibold text-green-400">
                     <span className="material-symbols-outlined text-[16px] text-green-400">
                       arrow_upward

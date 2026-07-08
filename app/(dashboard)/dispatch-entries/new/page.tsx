@@ -557,7 +557,7 @@ export default function NewDispatchEntryPage() {
                               >
                                 {prods.map((p) => (
                                   <option key={p.id} value={p.id}>
-                                    {p.name}
+                                    {p.name} ({category})
                                   </option>
                                 ))}
                               </optgroup>
@@ -567,6 +567,14 @@ export default function NewDispatchEntryPage() {
                             expand_more
                           </span>
                         </div>
+                        {item.productId && (
+                          <span className="text-on-surface-variant mt-1 block text-[11px]">
+                            Category:{' '}
+                            <span className="text-secondary font-medium">
+                              {products.find((p) => p.id === item.productId)?.category.name}
+                            </span>
+                          </span>
+                        )}
                       </td>
 
                       {/* Stock Indicator */}
