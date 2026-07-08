@@ -15,9 +15,6 @@ export interface DispatchLineItemInput {
   productId: string;
   quantity: number;
   price: number;
-  cgst: number;
-  sgst: number;
-  igst: number;
   lineTotal: number;
 }
 
@@ -26,11 +23,9 @@ export interface CreateDispatchEntryData {
   customerId: string;
   place: string;
   transport?: string;
+  transportAmount?: number;
   date: Date;
   totalAmount: number;
-  totalCgst: number;
-  totalSgst: number;
-  totalIgst: number;
   items: DispatchLineItemInput[];
 }
 
@@ -149,19 +144,14 @@ export class DispatchEntryRepository {
           customerId: data.customerId,
           place: data.place,
           transport: data.transport,
+          transportAmount: data.transportAmount,
           date: data.date,
           totalAmount: data.totalAmount,
-          totalCgst: data.totalCgst,
-          totalSgst: data.totalSgst,
-          totalIgst: data.totalIgst,
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
               price: item.price,
-              cgst: item.cgst,
-              sgst: item.sgst,
-              igst: item.igst,
               lineTotal: item.lineTotal,
             })),
           },

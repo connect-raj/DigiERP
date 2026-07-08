@@ -6,6 +6,7 @@ export const createDispatchEntrySchema = z.object({
   place: z.string().min(1, 'Place is required'),
   date: z.string().datetime('Invalid date'),
   transport: z.string().optional(),
+  transportAmount: z.number().nonnegative('Transport amount must be >= 0').optional(),
   items: z
     .array(
       z.object({

@@ -50,9 +50,6 @@ export class DispatchEntryController {
         categoryName: item.product.category.name,
         quantity: item.quantity,
         price: item.price,
-        cgst: item.cgst,
-        sgst: item.sgst,
-        igst: item.igst,
         lineTotal: item.lineTotal,
       })),
       invoice: invoice
@@ -64,6 +61,7 @@ export class DispatchEntryController {
           }
         : null,
       stockTransactions: stockTxns.map((txn) => ({
+        id: txn.id,
         productId: txn.productId,
         productName: txn.product.name,
         changeQty: txn.changeQty,

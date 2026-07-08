@@ -89,10 +89,7 @@ describe('DispatchEntryRepository', () => {
       productId: 'prod-1',
       quantity: 5,
       price: 100,
-      cgst: 9,
-      sgst: 9,
-      igst: 0,
-      lineTotal: 518,
+      lineTotal: 500,
     };
 
     it('creates the entry and decrements stock when supply is sufficient', async () => {
@@ -109,10 +106,7 @@ describe('DispatchEntryRepository', () => {
         customerId: 'cust-1',
         place: 'Ahmedabad',
         date: new Date('2026-07-01'),
-        totalAmount: 518,
-        totalCgst: 9,
-        totalSgst: 9,
-        totalIgst: 0,
+        totalAmount: 500,
         items: [baseItem],
       });
 
@@ -133,6 +127,32 @@ describe('DispatchEntryRepository', () => {
       });
     });
 
+    it('passes transportAmount through to the DispatchEntry create call when provided', async () => {
+      vi.mocked(prisma.product.findMany).mockResolvedValue([
+        { id: 'prod-1', name: 'Ink Red', currentStock: 10 } as never,
+      ]);
+      vi.mocked(prisma.dispatchEntry.create).mockResolvedValue({
+        id: 'entry-1',
+        items: [],
+      } as never);
+
+      await dispatchEntryRepository.createWithStockDecrement({
+        challanNo: 'CH-001',
+        customerId: 'cust-1',
+        place: 'Ahmedabad',
+        transportAmount: 250,
+        date: new Date('2026-07-01'),
+        totalAmount: 500,
+        items: [baseItem],
+      });
+
+      expect(prisma.dispatchEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ transportAmount: 250 }),
+        })
+      );
+    });
+
     it('aborts with INSUFFICIENT_STOCK and never writes when stock is short', async () => {
       vi.mocked(prisma.product.findMany).mockResolvedValue([
         { id: 'prod-1', name: 'Ink Red', currentStock: 2 } as never,
@@ -144,10 +164,7 @@ describe('DispatchEntryRepository', () => {
           customerId: 'cust-1',
           place: 'Ahmedabad',
           date: new Date('2026-07-01'),
-          totalAmount: 518,
-          totalCgst: 9,
-          totalSgst: 9,
-          totalIgst: 0,
+          totalAmount: 500,
           items: [baseItem],
         })
       ).rejects.toThrow(
@@ -171,10 +188,7 @@ describe('DispatchEntryRepository', () => {
           customerId: 'cust-1',
           place: 'Ahmedabad',
           date: new Date('2026-07-01'),
-          totalAmount: 1036,
-          totalCgst: 18,
-          totalSgst: 18,
-          totalIgst: 0,
+          totalAmount: 1000,
           items: [baseItem, { ...baseItem, quantity: 5 }],
         })
       ).rejects.toThrow(BadRequestError);
