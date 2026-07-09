@@ -116,12 +116,13 @@ model PriceHistory {
 }
 
 model Settings {
-  id             Int     @id @default(autoincrement())
-  companyName    String
-  companyAddress String
-  companyState   String
-  companyGstin   String
-  companyPan     String?
+  id                 Int     @id @default(autoincrement())
+  companyName        String
+  companyAddress     String
+  companyState       String
+  companyGstin       String
+  companyPan         String?
+  financialYearStart Int     @default(4)
 }
 
 model StockTransaction {
