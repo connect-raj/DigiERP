@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import ShaderBackground from '@/components/ShaderBackground';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -15,15 +17,6 @@ export default function LoginPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [handshakeMessage, setHandshakeMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  interface LoggedInUser {
-    id: string;
-    username: string;
-    role: string;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-  }
-  const [successUser, setSuccessUser] = useState<LoggedInUser | null>(null);
 
   // Trigger shake animation on apiError
   useEffect(() => {
@@ -88,8 +81,7 @@ export default function LoginPage() {
       } else {
         setHandshakeMessage('Handshake established. Authorizing administrative node...');
         setTimeout(() => {
-          setIsSubmitting(false);
-          setSuccessUser(data.data.user);
+          router.push('/');
         }, 1500);
       }
     } catch {
@@ -97,18 +89,6 @@ export default function LoginPage() {
       setIsSubmitting(false);
       setHandshakeMessage(null);
     }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-    setSuccessUser(null);
-    setUsername('');
-    setPassword('');
-    setHandshakeMessage(null);
   };
 
   return (
@@ -268,187 +248,153 @@ export default function LoginPage() {
         )}
 
         <div className="hairline-border animate-login-card rounded-lg bg-[#1f1f1f] p-6 shadow-2xl">
-          {successUser ? (
-            /* Success State */
-            <div className="flex flex-col items-center gap-4 py-6 text-center">
+          {/* Brand Identity */}
+          <div className="mb-10 flex flex-col items-center">
+            <div className="mb-1 flex items-center gap-2">
               <span
-                className="material-symbols-outlined text-6xl text-emerald-400"
+                className="material-symbols-outlined text-3xl text-white"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
-                verified_user
+                fluid_med
               </span>
-              <h2 className="text-2xl font-bold text-white">Session Provisioned</h2>
-              <div className="space-y-1 text-sm text-[#c4c7c8]">
-                <p>
-                  Welcome back, <strong className="text-white">{successUser.username}</strong>
-                </p>
-                <p className="inline-block rounded bg-white/10 px-2 py-0.5 text-[10px] tracking-wider text-white uppercase">
-                  Role: {successUser.role}
-                </p>
-              </div>
-              <p className="mt-2 text-xs text-[#8e9192]">
-                Administrative node successfully authorized.
-              </p>
-              <button
-                onClick={handleLogout}
-                className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-white font-semibold text-[#181818] transition-all hover:bg-neutral-100 active:scale-[0.98]"
-              >
-                Terminate Session
-                <span className="material-symbols-outlined text-xl">logout</span>
-              </button>
+              <h1 className="text-xl font-bold tracking-tight text-white">DigiERP</h1>
             </div>
-          ) : (
-            /* Standard Login / Loading States */
-            <>
-              {/* Brand Identity */}
-              <div className="mb-10 flex flex-col items-center">
-                <div className="mb-1 flex items-center gap-2">
-                  <span
-                    className="material-symbols-outlined text-3xl text-white"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    fluid_med
-                  </span>
-                  <h1 className="text-xl font-bold tracking-tight text-white">DigiERP</h1>
-                </div>
-                <p className="text-[9px] font-bold tracking-[0.2em] text-[#c4c7c8] uppercase">
-                  InkStream Distribution
-                </p>
+            <p className="text-[9px] font-bold tracking-[0.2em] text-[#c4c7c8] uppercase">
+              InkStream Distribution
+            </p>
+          </div>
+
+          {/* Header Content */}
+          <div className="mb-8">
+            <h2 className="mb-2 text-2xl font-semibold text-white">Sign in to your account</h2>
+            <p className="text-sm text-[#c4c7c8]">
+              Enter your credentials to access the logistics dashboard.
+            </p>
+          </div>
+
+          {/* Form */}
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {/* Username / Operator Identity Field */}
+            <div className="space-y-1">
+              <div className="floating-label-group">
+                <input
+                  className={`hairline-border h-12 w-full rounded-md bg-[#181818] px-4 text-sm text-white transition-all focus:border-white focus:outline-none ${validationErrors.username ? 'border-[#ffb4ab] focus:border-[#ffb4ab]' : ''}`}
+                  id="username"
+                  name="username"
+                  placeholder=" "
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={isSubmitting}
+                />
+                <label htmlFor="username" className="text-sm">
+                  Operator ID / Username
+                </label>
               </div>
-
-              {/* Header Content */}
-              <div className="mb-8">
-                <h2 className="mb-2 text-2xl font-semibold text-white">Sign in to your account</h2>
-                <p className="text-sm text-[#c4c7c8]">
-                  Enter your credentials to access the logistics dashboard.
+              {validationErrors.username && (
+                <p className="flex items-center gap-1 text-xs text-[#ffb4ab]">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  {validationErrors.username}
                 </p>
-              </div>
+              )}
+            </div>
 
-              {/* Form */}
-              <form className="space-y-5" onSubmit={handleSubmit}>
-                {/* Username / Operator Identity Field */}
-                <div className="space-y-1">
-                  <div className="floating-label-group">
-                    <input
-                      className={`hairline-border h-12 w-full rounded-md bg-[#181818] px-4 text-sm text-white transition-all focus:border-white focus:outline-none ${validationErrors.username ? 'border-[#ffb4ab] focus:border-[#ffb4ab]' : ''}`}
-                      id="username"
-                      name="username"
-                      placeholder=" "
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      disabled={isSubmitting}
-                    />
-                    <label htmlFor="username" className="text-sm">
-                      Operator ID / Username
-                    </label>
-                  </div>
-                  {validationErrors.username && (
-                    <p className="flex items-center gap-1 text-xs text-[#ffb4ab]">
-                      <span className="material-symbols-outlined text-[14px]">error</span>
-                      {validationErrors.username}
-                    </p>
-                  )}
-                </div>
-
-                {/* Password / Security Token Field */}
-                <div className="space-y-1">
-                  <div className="floating-label-group relative">
-                    <input
-                      className={`hairline-border h-12 w-full rounded-md bg-[#181818] pr-12 pl-4 text-sm text-white transition-all focus:border-white focus:outline-none ${validationErrors.password ? 'border-[#ffb4ab] focus:border-[#ffb4ab]' : ''}`}
-                      id="password"
-                      name="password"
-                      placeholder=" "
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={isSubmitting}
-                    />
-                    <label htmlFor="password" className="text-sm">
-                      Security Token / Password
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="material-symbols-outlined absolute top-1/2 right-4 -translate-y-1/2 text-lg text-[#8e9192] transition-colors hover:text-white"
-                      disabled={isSubmitting}
-                    >
-                      {showPassword ? 'visibility_off' : 'visibility'}
-                    </button>
-                  </div>
-                  {validationErrors.password && (
-                    <p className="flex items-center gap-1 text-xs text-[#ffb4ab]">
-                      <span className="material-symbols-outlined text-[14px]">error</span>
-                      {validationErrors.password}
-                    </p>
-                  )}
-                </div>
-
-                {/* Secondary Actions */}
-                <div className="flex items-center justify-between py-1 text-sm">
-                  <label className="group flex cursor-pointer items-center gap-2">
-                    <input
-                      className="custom-checkbox"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      disabled={isSubmitting}
-                    />
-                    <span className="text-[#c4c7c8] transition-colors group-hover:text-white">
-                      Remember me
-                    </span>
-                  </label>
-                  <a className="text-[#c4c7c8] transition-colors hover:text-white" href="#">
-                    Forgot password?
-                  </a>
-                </div>
-
-                {/* CTA Button */}
+            {/* Password / Security Token Field */}
+            <div className="space-y-1">
+              <div className="floating-label-group relative">
+                <input
+                  className={`hairline-border h-12 w-full rounded-md bg-[#181818] pr-12 pl-4 text-sm text-white transition-all focus:border-white focus:outline-none ${validationErrors.password ? 'border-[#ffb4ab] focus:border-[#ffb4ab]' : ''}`}
+                  id="password"
+                  name="password"
+                  placeholder=" "
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isSubmitting}
+                />
+                <label htmlFor="password" className="text-sm">
+                  Security Token / Password
+                </label>
                 <button
-                  className={`relative mt-4 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-md text-sm font-semibold transition-all active:scale-[0.98] ${
-                    isSubmitting
-                      ? 'cursor-wait bg-white/20 text-[#c4c7c8]'
-                      : 'bg-white text-[#181818] hover:bg-neutral-100'
-                  }`}
-                  type="submit"
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="material-symbols-outlined absolute top-1/2 right-4 -translate-y-1/2 text-lg text-[#8e9192] transition-colors hover:text-white"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <span className="material-symbols-outlined animate-spin-slow text-lg">
-                        progress_activity
-                      </span>
-                      <span>AUTHENTICATING...</span>
-                      <div className="loading-pulse absolute bottom-0 left-0 h-[2px] w-full bg-white"></div>
-                    </>
-                  ) : (
-                    <>
-                      Sign In
-                      <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                    </>
-                  )}
+                  {showPassword ? 'visibility_off' : 'visibility'}
                 </button>
-              </form>
-
-              {/* Handshake/Status Message Banner */}
-              {handshakeMessage && (
-                <div className="mt-5 flex items-center gap-3 border-l-2 border-[#0566d9] bg-[#0566d9]/10 px-4 py-3">
-                  <span className="material-symbols-outlined text-[18px] text-[#adc6ff]">info</span>
-                  <p className="loading-pulse text-xs text-[#adc6ff]">{handshakeMessage}</p>
-                </div>
-              )}
-
-              {/* Footer Security Note */}
-              <div className="mt-8 flex items-center justify-center gap-2 border-t border-[#2e2e2e] pt-6">
-                <span className="material-symbols-outlined text-[16px] text-[#c4c7c8]">
-                  verified_user
-                </span>
-                <span className="text-[9px] font-bold tracking-[0.12em] text-[#c4c7c8] uppercase">
-                  Secure SSO Login
-                </span>
               </div>
-            </>
+              {validationErrors.password && (
+                <p className="flex items-center gap-1 text-xs text-[#ffb4ab]">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  {validationErrors.password}
+                </p>
+              )}
+            </div>
+
+            {/* Secondary Actions */}
+            <div className="flex items-center justify-between py-1 text-sm">
+              <label className="group flex cursor-pointer items-center gap-2">
+                <input
+                  className="custom-checkbox"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isSubmitting}
+                />
+                <span className="text-[#c4c7c8] transition-colors group-hover:text-white">
+                  Remember me
+                </span>
+              </label>
+              <a className="text-[#c4c7c8] transition-colors hover:text-white" href="#">
+                Forgot password?
+              </a>
+            </div>
+
+            {/* CTA Button */}
+            <button
+              className={`relative mt-4 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-md text-sm font-semibold transition-all active:scale-[0.98] ${
+                isSubmitting
+                  ? 'cursor-wait bg-white/20 text-[#c4c7c8]'
+                  : 'bg-white text-[#181818] hover:bg-neutral-100'
+              }`}
+              type="submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="material-symbols-outlined animate-spin-slow text-lg">
+                    progress_activity
+                  </span>
+                  <span>AUTHENTICATING...</span>
+                  <div className="loading-pulse absolute bottom-0 left-0 h-[2px] w-full bg-white"></div>
+                </>
+              ) : (
+                <>
+                  Sign In
+                  <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Handshake/Status Message Banner */}
+          {handshakeMessage && (
+            <div className="mt-5 flex items-center gap-3 border-l-2 border-[#0566d9] bg-[#0566d9]/10 px-4 py-3">
+              <span className="material-symbols-outlined text-[18px] text-[#adc6ff]">info</span>
+              <p className="loading-pulse text-xs text-[#adc6ff]">{handshakeMessage}</p>
+            </div>
           )}
+
+          {/* Footer Security Note */}
+          <div className="mt-8 flex items-center justify-center gap-2 border-t border-[#2e2e2e] pt-6">
+            <span className="material-symbols-outlined text-[16px] text-[#c4c7c8]">
+              verified_user
+            </span>
+            <span className="text-[9px] font-bold tracking-[0.12em] text-[#c4c7c8] uppercase">
+              Secure SSO Login
+            </span>
+          </div>
         </div>
 
         {/* Global Footer minimal credit */}
