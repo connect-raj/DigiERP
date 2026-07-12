@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     product: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -41,11 +42,16 @@ describe('ProductRepository', () => {
   });
 
   describe('findAll', () => {
-    it('should return products with category and vendors', async () => {
+    beforeEach(() => {
+      vi.mocked(prisma.product.count).mockResolvedValue(0);
+    });
+
+    it('should return products with category and vendors, plus total count', async () => {
       vi.mocked(prisma.product.findMany).mockResolvedValue([mockProduct as never]);
+      vi.mocked(prisma.product.count).mockResolvedValue(1);
       const result = await productRepository.findAll({});
       expect(prisma.product.findMany).toHaveBeenCalled();
-      expect(result).toHaveLength(1);
+      expect(result).toEqual({ data: [mockProduct], total: 1 });
     });
 
     it('should filter by categoryId', async () => {
@@ -65,6 +71,29 @@ describe('ProductRepository', () => {
         expect.objectContaining({
           where: expect.objectContaining({ isActive: false }),
         })
+      );
+    });
+
+    it('should search by name or category name', async () => {
+      vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+      await productRepository.findAll({ search: 'cyan' });
+      expect(prisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { name: { contains: 'cyan', mode: 'insensitive' } },
+              { category: { name: { contains: 'cyan', mode: 'insensitive' } } },
+            ],
+          }),
+        })
+      );
+    });
+
+    it('should apply skip/take for pagination', async () => {
+      vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+      await productRepository.findAll({ skip: 10, take: 10 });
+      expect(prisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
       );
     });
   });

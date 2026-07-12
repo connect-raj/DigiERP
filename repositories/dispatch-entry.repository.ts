@@ -9,6 +9,8 @@ export interface DispatchEntryFilters {
   from?: Date;
   to?: Date;
   search?: string;
+  skip?: number;
+  take?: number;
 }
 
 export interface DispatchLineItemInput {
@@ -37,7 +39,7 @@ export interface StockRestoreItem {
 
 export class DispatchEntryRepository {
   async findAll(filters: DispatchEntryFilters) {
-    const { customerId, status, isCancelled, from, to, search } = filters;
+    const { customerId, status, isCancelled, from, to, search, skip, take } = filters;
 
     const where: Prisma.DispatchEntryWhereInput = {
       isCancelled: isCancelled ?? false,
@@ -53,14 +55,21 @@ export class DispatchEntryRepository {
       where.challanNo = { contains: search, mode: 'insensitive' };
     }
 
-    return prisma.dispatchEntry.findMany({
-      where,
-      include: {
-        customer: { select: { id: true, firmName: true } },
-        _count: { select: { items: true } },
-      },
-      orderBy: { date: 'desc' },
-    });
+    const [data, total] = await Promise.all([
+      prisma.dispatchEntry.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, firmName: true } },
+          _count: { select: { items: true } },
+        },
+        orderBy: { date: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.dispatchEntry.count({ where }),
+    ]);
+
+    return { data, total };
   }
 
   async findById(id: string) {

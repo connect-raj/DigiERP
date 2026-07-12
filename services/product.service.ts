@@ -3,7 +3,13 @@ import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { CreateProductInput, UpdateProductInput, AdjustStockInput } from '@/validations/product';
 
 export class ProductService {
-  async getAll(params: { categoryId?: string; isActive?: boolean; search?: string }) {
+  async getAll(params: {
+    categoryId?: string;
+    isActive?: boolean;
+    search?: string;
+    skip?: number;
+    take?: number;
+  }) {
     return productRepository.findAll(params);
   }
 

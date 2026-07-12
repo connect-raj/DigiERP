@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { productService } from '@/services/product.service';
 import { createProductSchema, updateProductSchema, adjustStockSchema } from '@/validations/product';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 
 export class ProductController {
   async getAll(req: NextRequest) {
@@ -13,8 +14,15 @@ export class ProductController {
     const isActive =
       isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : undefined;
 
-    const products = await productService.getAll({ categoryId, isActive, search });
-    return successResponse(products);
+    const { page, limit, skip, take } = parsePagination(searchParams);
+    const { data, total } = await productService.getAll({
+      categoryId,
+      isActive,
+      search,
+      skip,
+      take,
+    });
+    return paginatedResponse(data, { page, limit, total });
   }
 
   async getById(_req: NextRequest, id: string) {

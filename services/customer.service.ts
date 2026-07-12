@@ -3,8 +3,8 @@ import { NotFoundError } from '@/lib/errors';
 import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
 
 export class CustomerService {
-  async getAll(search?: string) {
-    return customerRepository.findAll(search);
+  async getAll(params: { search?: string; skip?: number; take?: number }) {
+    return customerRepository.findAll(params);
   }
 
   async getById(id: string) {

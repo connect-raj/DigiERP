@@ -6,6 +6,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     vendor: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -37,12 +38,17 @@ describe('VendorRepository', () => {
   });
 
   describe('findAll', () => {
-    it('should return vendors with _count', async () => {
+    beforeEach(() => {
+      vi.mocked(prisma.vendor.count).mockResolvedValue(0);
+    });
+
+    it('should return vendors with _count and total', async () => {
       const vendors = [{ ...mockVendor, _count: { vendorProducts: 3 } }];
       vi.mocked(prisma.vendor.findMany).mockResolvedValue(vendors as never);
+      vi.mocked(prisma.vendor.count).mockResolvedValue(1);
       const result = await vendorRepository.findAll({});
       expect(prisma.vendor.findMany).toHaveBeenCalled();
-      expect(result).toHaveLength(1);
+      expect(result).toEqual({ data: vendors, total: 1 });
     });
 
     it('should filter by isActive', async () => {
@@ -58,6 +64,14 @@ describe('VendorRepository', () => {
       await vendorRepository.findAll({ search: 'test' });
       expect(prisma.vendor.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ OR: expect.any(Array) }) })
+      );
+    });
+
+    it('should apply skip/take for pagination', async () => {
+      vi.mocked(prisma.vendor.findMany).mockResolvedValue([]);
+      await vendorRepository.findAll({ skip: 10, take: 10 });
+      expect(prisma.vendor.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
       );
     });
   });

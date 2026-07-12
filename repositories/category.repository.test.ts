@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     category: {
       findMany: vi.fn(),
+      aggregate: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -30,15 +31,49 @@ describe('CategoryRepository', () => {
   });
 
   describe('findAll', () => {
-    it('should return categories with product count', async () => {
+    beforeEach(() => {
+      vi.mocked(prisma.category.aggregate).mockResolvedValue({
+        _count: 0,
+        _avg: { gstRate: null },
+      } as never);
+    });
+
+    it('should return categories with product count, total, and avg GST rate', async () => {
       vi.mocked(prisma.category.findMany).mockResolvedValue([mockCategory as never]);
-      const result = await categoryRepository.findAll();
+      vi.mocked(prisma.category.aggregate).mockResolvedValue({
+        _count: 1,
+        _avg: { gstRate: new Decimal('18.00') },
+      } as never);
+      const result = await categoryRepository.findAll({});
       expect(prisma.category.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           include: { _count: { select: { products: true } } },
         })
       );
-      expect(result).toHaveLength(1);
+      expect(result).toEqual({ data: [mockCategory], total: 1, avgGstRate: 18 });
+    });
+
+    it('should search by name or hsnCode', async () => {
+      vi.mocked(prisma.category.findMany).mockResolvedValue([]);
+      await categoryRepository.findAll({ search: 'solvent' });
+      expect(prisma.category.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [
+              { name: { contains: 'solvent', mode: 'insensitive' } },
+              { hsnCode: { contains: 'solvent', mode: 'insensitive' } },
+            ],
+          },
+        })
+      );
+    });
+
+    it('should apply skip/take for pagination', async () => {
+      vi.mocked(prisma.category.findMany).mockResolvedValue([]);
+      await categoryRepository.findAll({ skip: 10, take: 10 });
+      expect(prisma.category.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
+      );
     });
   });
 

@@ -1,15 +1,17 @@
 import { NextRequest } from 'next/server';
 import { customerService } from '@/services/customer.service';
 import { createCustomerSchema, updateCustomerSchema } from '@/validations/customer';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 
 export class CustomerController {
   async getAll(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') ?? undefined;
+    const { page, limit, skip, take } = parsePagination(searchParams);
 
-    const customers = await customerService.getAll(search);
-    return successResponse(customers);
+    const { data, total } = await customerService.getAll({ search, skip, take });
+    return paginatedResponse(data, { page, limit, total });
   }
 
   async getById(_req: NextRequest, id: string) {

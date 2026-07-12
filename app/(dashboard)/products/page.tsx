@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_LIMIT = 10;
 
 type Product = {
   id: string;
@@ -21,6 +24,8 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -34,29 +39,38 @@ export default function ProductsPage() {
     isActive: true,
   });
 
+  const fetchCategories = async () => {
+    try {
+      // Category dropdown needs the full list, not a paginated page.
+      const res = await fetch('/api/categories?limit=1000');
+      const data = await res.json();
+      if (data.data) setCategories(data.data);
+    } catch (error) {
+      console.error('Failed to fetch categories', error);
+    }
+  };
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
       const url = new URL('/api/products', window.location.origin);
       if (search) url.searchParams.append('search', search);
       if (categoryId) url.searchParams.append('categoryId', categoryId);
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
 
-      const [prodRes, catRes] = await Promise.all([
-        fetch(url.toString()),
-        fetch('/api/categories'),
-      ]);
+      const res = await fetch(url.toString());
+      const data = await res.json();
 
-      const prodData = await prodRes.json();
-      const catData = await catRes.json();
-
-      if (prodData.data) {
-        setProducts(prodData.data);
-      }
-      if (catData.data) {
-        setCategories(catData.data);
+      if (data.data) {
+        setProducts(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
       }
     } catch (error) {
-      console.error('Failed to fetch data', error);
+      console.error('Failed to fetch products', error);
     } finally {
       setLoading(false);
     }
@@ -164,9 +178,19 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, categoryId]);
+
+  useEffect(() => {
     // eslint-disable-next-line
     fetchProducts();
-  }, [search, categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, categoryId, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col gap-8">
@@ -177,7 +201,7 @@ export default function ProductsPage() {
           <span className="material-symbols-outlined px-3 text-[#8e9192]">search</span>
           <input
             className="text-on-surface font-body-md h-full w-full border-none bg-transparent p-0 text-[13px] placeholder:text-[#8e9192] focus:ring-0"
-            placeholder="Search products by name, SKU, or category..."
+            placeholder="Search products by name or category..."
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -253,7 +277,7 @@ export default function ProductsPage() {
                   Loading products...
                 </td>
               </tr>
-            ) : products.length === 0 ? (
+            ) : pagination.total === 0 ? (
               <tr>
                 <td colSpan={6} className="text-on-surface-variant px-6 py-8 text-center">
                   No products found.
@@ -324,6 +348,15 @@ export default function ProductsPage() {
             )}
           </tbody>
         </table>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
+        )}
       </div>
 
       {/* Add Product Modal */}

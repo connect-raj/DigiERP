@@ -3,8 +3,8 @@ import { NotFoundError } from '@/lib/errors';
 import { CreateCategoryInput, UpdateCategoryInput } from '@/validations/category';
 
 export class CategoryService {
-  async getAll() {
-    return categoryRepository.findAll();
+  async getAll(params: { search?: string; skip?: number; take?: number }) {
+    return categoryRepository.findAll(params);
   }
 
   async getById(id: string) {

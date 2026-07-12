@@ -41,11 +41,14 @@ describe('ProductService', () => {
   });
 
   describe('getAll', () => {
-    it('should return all products', async () => {
-      vi.spyOn(productRepository, 'findAll').mockResolvedValue([mockProduct as never]);
+    it('should return all products with total count', async () => {
+      vi.spyOn(productRepository, 'findAll').mockResolvedValue({
+        data: [mockProduct as never],
+        total: 1,
+      });
       const result = await productService.getAll({});
       expect(productRepository.findAll).toHaveBeenCalledWith({});
-      expect(result).toHaveLength(1);
+      expect(result).toEqual({ data: [mockProduct], total: 1 });
     });
   });
 

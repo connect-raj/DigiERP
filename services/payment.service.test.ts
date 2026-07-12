@@ -7,6 +7,7 @@ import { CreatePaymentInput, AllocatePaymentsInput } from '@/validations/payment
 vi.mock('@/repositories/payment.repository', () => ({
   paymentRepository: {
     findAll: vi.fn(),
+    findStatsRows: vi.fn(),
     findById: vi.fn(),
     findByCustomerId: vi.fn(),
     findAllocationsByInvoiceId: vi.fn(),
@@ -21,6 +22,24 @@ describe('PaymentService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  describe('getSummary', () => {
+    it('sums received/unallocated and derives allocated', async () => {
+      vi.spyOn(paymentRepository, 'findStatsRows').mockResolvedValue([
+        { amount: 1000, unallocatedAmount: 200 },
+        { amount: 500, unallocatedAmount: 500 },
+      ] as never);
+
+      const result = await paymentService.getSummary({});
+
+      expect(result).toEqual({
+        totalReceived: 1500,
+        totalAllocated: 800,
+        totalUnallocated: 700,
+        count: 2,
+      });
+    });
   });
 
   describe('getById', () => {

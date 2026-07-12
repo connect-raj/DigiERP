@@ -49,7 +49,10 @@ describe('DispatchEntryService', () => {
 
   describe('getAll', () => {
     it('passes filters through to the repository', async () => {
-      vi.spyOn(dispatchEntryRepository, 'findAll').mockResolvedValue([] as never);
+      vi.spyOn(dispatchEntryRepository, 'findAll').mockResolvedValue({
+        data: [],
+        total: 0,
+      } as never);
       await dispatchEntryService.getAll({ customerId: 'cust-1' });
       expect(dispatchEntryRepository.findAll).toHaveBeenCalledWith({ customerId: 'cust-1' });
     });

@@ -92,6 +92,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       const [custRes, pricesRes, dispatchRes, invoicesRes, paymentsRes] = await Promise.all([
         fetch(`/api/customers/${id}`),
         fetch(`/api/customers/${id}/prices`),
+        // Only the 5 most recent are shown below; default page-1 (10, date-desc) already covers that.
         fetch(`/api/dispatch-entries?customerId=${id}`),
         fetch(`/api/invoices?customerId=${id}`),
         fetch(`/api/customers/${id}/payments`),

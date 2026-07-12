@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_LIMIT = 10;
 
 type Vendor = {
   id: string;
@@ -31,16 +34,19 @@ export default function PurchasesPage() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [vendorFilter, setVendorFilter] = useState('All');
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [stats, setStats] = useState({
     totalValue: 0,
     pendingPayments: 0,
     activeVendors: 0,
-    procurementHealth: 94,
+    procurementHealth: 100,
   });
 
   const fetchVendors = async () => {
     try {
-      const res = await fetch('/api/vendors');
+      // Filter dropdown needs the full list, not a paginated page.
+      const res = await fetch('/api/vendors?limit=1000');
       const data = await res.json();
       if (data.data) {
         setVendors(data.data);
@@ -58,36 +64,22 @@ export default function PurchasesPage() {
       if (statusFilter !== 'All')
         url.searchParams.append('paymentStatus', statusFilter.toUpperCase());
       if (vendorFilter !== 'All') url.searchParams.append('vendorId', vendorFilter);
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
 
       const res = await fetch(url.toString());
       const data = await res.json();
       if (data.data) {
         setPurchases(data.data);
-
-        // Calculate basic stats
-        const total = data.data.reduce(
-          (acc: number, p: Purchase) => acc + Number(p.totalAmount),
-          0
-        );
-        const pending = data.data.reduce(
-          (acc: number, p: Purchase) => acc + (Number(p.totalAmount) - Number(p.paidAmount)),
-          0
-        );
-
-        const totalExpected = data.data.filter((p: Purchase) => p.expectedDeliveryDate).length;
-        const fulfilled = data.data.filter(
-          (p: Purchase) =>
-            p.expectedDeliveryDate &&
-            p.receivedDate &&
-            new Date(p.receivedDate) <= new Date(p.expectedDeliveryDate)
-        ).length;
-        const health = totalExpected > 0 ? Math.round((fulfilled / totalExpected) * 100) : 100;
-
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
         setStats({
-          totalValue: total,
-          pendingPayments: pending,
-          activeVendors: new Set(data.data.map((p: Purchase) => p.vendorId)).size,
-          procurementHealth: health,
+          totalValue: data.summary?.totalValue ?? 0,
+          pendingPayments: data.summary?.pendingPayments ?? 0,
+          activeVendors: data.summary?.activeVendors ?? 0,
+          procurementHealth: data.summary?.procurementHealth ?? 100,
         });
       }
     } catch (error) {
@@ -103,9 +95,14 @@ export default function PurchasesPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, statusFilter, vendorFilter]);
+
+  useEffect(() => {
     // eslint-disable-next-line
     fetchPurchases();
-  }, [search, statusFilter, vendorFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, statusFilter, vendorFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -265,7 +262,7 @@ export default function PurchasesPage() {
                     Loading...
                   </td>
                 </tr>
-              ) : purchases.length === 0 ? (
+              ) : pagination.total === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-on-surface-variant p-6 text-center">
                     No purchases found.
@@ -336,6 +333,15 @@ export default function PurchasesPage() {
             </tbody>
           </table>
         </div>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
+        )}
       </div>
     </div>
   );

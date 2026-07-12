@@ -8,6 +8,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     payment: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       create: vi.fn(),
@@ -61,6 +62,34 @@ describe('PaymentRepository', () => {
       (cb: (tx: typeof prisma) => Promise<unknown>) => cb(prisma)
     );
     vi.mocked(prisma.allocationBatch.delete).mockResolvedValue({} as never);
+  });
+
+  describe('findAll', () => {
+    it('filters by reference when search is provided, and returns total count', async () => {
+      vi.mocked(prisma.payment.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.payment.count).mockResolvedValue(4);
+      const result = await paymentRepository.findAll({ search: 'REF-1', skip: 10, take: 10 });
+      expect(prisma.payment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { reference: { contains: 'REF-1', mode: 'insensitive' } },
+          orderBy: { date: 'desc' },
+          skip: 10,
+          take: 10,
+        })
+      );
+      expect(result).toEqual({ data: [], total: 4 });
+    });
+  });
+
+  describe('findStatsRows', () => {
+    it('selects only the fields needed for stat aggregation, unbounded', async () => {
+      vi.mocked(prisma.payment.findMany).mockResolvedValue([]);
+      await paymentRepository.findStatsRows({ customerId: 'cust-1' });
+      expect(prisma.payment.findMany).toHaveBeenCalledWith({
+        where: { customerId: 'cust-1' },
+        select: { amount: true, unallocatedAmount: true },
+      });
+    });
   });
 
   describe('createPaymentTx', () => {

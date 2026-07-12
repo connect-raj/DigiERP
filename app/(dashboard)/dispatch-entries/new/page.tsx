@@ -70,8 +70,9 @@ export default function NewDispatchEntryPage() {
       try {
         setLoading(true);
         const [custRes, prodRes] = await Promise.all([
-          fetch('/api/customers'),
-          fetch('/api/products?isActive=true'),
+          // Customer/product pickers need the full list, not a paginated page.
+          fetch('/api/customers?limit=1000'),
+          fetch('/api/products?isActive=true&limit=1000'),
         ]);
         const custData = await custRes.json();
         const prodData = await prodRes.json();

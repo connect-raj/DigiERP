@@ -1,26 +1,45 @@
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { CreateProductInput, UpdateProductInput } from '@/validations/product';
 
 export class ProductRepository {
-  async findAll(params: { categoryId?: string; isActive?: boolean; search?: string }) {
-    const { categoryId, isActive, search } = params;
-    return prisma.product.findMany({
-      where: {
-        ...(categoryId && { categoryId }),
-        ...(isActive !== undefined && { isActive }),
-        ...(search && {
-          name: { contains: search, mode: 'insensitive' },
-        }),
-      },
-      include: {
-        category: true,
-        vendorProducts: {
-          include: { vendor: true },
+  async findAll(params: {
+    categoryId?: string;
+    isActive?: boolean;
+    search?: string;
+    skip?: number;
+    take?: number;
+  }) {
+    const { categoryId, isActive, search, skip, take } = params;
+    const where: Prisma.ProductWhereInput = {
+      ...(categoryId && { categoryId }),
+      ...(isActive !== undefined && { isActive }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { category: { name: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          category: true,
+          vendorProducts: {
+            include: { vendor: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return { data, total };
   }
 
   async findById(id: string) {

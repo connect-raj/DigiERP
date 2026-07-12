@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_LIMIT = 10;
 
 type Vendor = {
   id: string;
@@ -20,6 +23,8 @@ export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,10 +45,16 @@ export default function VendorsPage() {
       setLoading(true);
       const url = new URL('/api/vendors', window.location.origin);
       if (search) url.searchParams.append('search', search);
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
       const res = await fetch(url.toString());
       const data = await res.json();
       if (data.data) {
         setVendors(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
       }
     } catch (error) {
       console.error('Failed to fetch vendors', error);
@@ -162,9 +173,14 @@ export default function VendorsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
     // eslint-disable-next-line
     fetchVendors();
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col gap-8">
@@ -232,7 +248,7 @@ export default function VendorsPage() {
                   Loading vendors...
                 </td>
               </tr>
-            ) : vendors.length === 0 ? (
+            ) : pagination.total === 0 ? (
               <tr>
                 <td colSpan={5} className="text-on-surface-variant px-6 py-8 text-center">
                   No vendors found.
@@ -336,6 +352,15 @@ export default function VendorsPage() {
             )}
           </tbody>
         </table>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
+        )}
       </div>
 
       {/* Add Vendor Modal */}

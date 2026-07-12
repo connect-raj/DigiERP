@@ -102,12 +102,14 @@ export default function NewPurchasePage() {
   }, [watchItems, products]);
 
   useEffect(() => {
-    fetch('/api/vendors')
+    // Vendor picker needs the full list, not a paginated page.
+    fetch('/api/vendors?limit=1000')
       .then((res) => res.json())
       .then((data) => {
         if (data.data) setVendors(data.data.filter((v: { isActive: boolean }) => v.isActive));
       });
-    fetch('/api/products')
+    // Product picker needs the full list, not a paginated page.
+    fetch('/api/products?limit=1000')
       .then((res) => res.json())
       .then((data) => {
         if (data.data) setProducts(data.data.filter((p: { isActive: boolean }) => p.isActive));

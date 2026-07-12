@@ -13,6 +13,28 @@ export class InvoiceService {
     return invoiceRepository.findAll(filters);
   }
 
+  async getSummary(filters: InvoiceFilters) {
+    const rows = await invoiceRepository.findStatsRows(filters);
+
+    let totalInvoiced = 0;
+    let outstanding = 0;
+    let paid = 0;
+    let pendingCount = 0;
+
+    for (const row of rows) {
+      const total = Number(row.totalAmount);
+      const paidAmt = Number(row.paidAmount);
+      totalInvoiced += total;
+      paid += paidAmt;
+      if (row.paymentStatus !== 'PAID') {
+        outstanding += total - paidAmt;
+        pendingCount += 1;
+      }
+    }
+
+    return { totalInvoiced, outstanding, paid, pendingCount };
+  }
+
   async getById(id: string) {
     const invoice = await invoiceRepository.findById(id);
     if (!invoice) {

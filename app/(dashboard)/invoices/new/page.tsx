@@ -84,7 +84,8 @@ function CreateInvoiceContent() {
 
   useEffect(() => {
     if (preselectedId) return;
-    fetch('/api/dispatch-entries?status=PENDING_BILLING&isCancelled=false')
+    // Entry picker needs the full list, not a paginated page.
+    fetch('/api/dispatch-entries?status=PENDING_BILLING&isCancelled=false&limit=1000')
       .then((res) => res.json())
       .then((data) => {
         if (data.data) setPickerOptions(data.data);

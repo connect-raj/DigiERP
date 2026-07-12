@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import RecordPaymentModal from './_components/RecordPaymentModal';
+import Pagination from '@/components/ui/Pagination';
 
 type PaymentCustomer = { id: string; firmName: string };
 type RecordedBy = { id: string; username: string } | null;
@@ -22,7 +23,7 @@ type Payment = {
 
 type Customer = { id: string; firmName: string };
 
-const PAGE_SIZE = 20;
+const PAGE_LIMIT = 10;
 const MODES = ['ALL', 'CASH', 'BANK_TRANSFER', 'CHEQUE', 'UPI', 'OTHER'];
 
 function formatINR(val: string | number) {
@@ -53,11 +54,19 @@ export default function PaymentsPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [stats, setStats] = useState({
+    totalReceived: 0,
+    totalAllocated: 0,
+    totalUnallocated: 0,
+    count: 0,
+  });
 
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
 
   useEffect(() => {
-    fetch('/api/customers')
+    // Filter dropdown needs the full list, not a paginated page.
+    fetch('/api/customers?limit=1000')
       .then((res) => res.json())
       .then((data) => {
         if (data.data) setCustomers(data.data);
@@ -74,10 +83,24 @@ export default function PaymentsPage() {
       if (modeFilter !== 'ALL') url.searchParams.append('mode', modeFilter);
       if (fromDate) url.searchParams.append('from', new Date(fromDate).toISOString());
       if (toDate) url.searchParams.append('to', new Date(toDate).toISOString());
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
 
       const res = await fetch(url.toString());
       const data = await res.json();
-      if (data.data) setPayments(data.data);
+      if (data.data) {
+        setPayments(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
+        setStats({
+          totalReceived: data.summary?.totalReceived ?? 0,
+          totalAllocated: data.summary?.totalAllocated ?? 0,
+          totalUnallocated: data.summary?.totalUnallocated ?? 0,
+          count: data.summary?.count ?? 0,
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch payments', error);
     } finally {
@@ -88,29 +111,12 @@ export default function PaymentsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-    fetchPayments();
   }, [search, customerFilter, modeFilter, fromDate, toDate]);
 
-  const stats = useMemo(() => {
-    let totalReceived = 0;
-    let totalUnallocated = 0;
-
-    payments.forEach((p) => {
-      totalReceived += Number(p.amount);
-      totalUnallocated += Number(p.unallocatedAmount);
-    });
-
-    return {
-      totalReceived,
-      totalAllocated: totalReceived - totalUnallocated,
-      totalUnallocated,
-      count: payments.length,
-    };
-  }, [payments]);
-
-  const totalPages = Math.max(1, Math.ceil(payments.length / PAGE_SIZE));
-  const paginated = payments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    // eslint-disable-next-line
+    fetchPayments();
+  }, [search, customerFilter, modeFilter, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -237,7 +243,7 @@ export default function PaymentsPage() {
                     ))}
                   </tr>
                 ))
-              ) : paginated.length === 0 ? (
+              ) : pagination.total === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-12 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -249,7 +255,7 @@ export default function PaymentsPage() {
                   </td>
                 </tr>
               ) : (
-                paginated.map((payment) => (
+                payments.map((payment) => (
                   <tr key={payment.id} className="bg-surface transition-colors hover:bg-[#1e1e1e]">
                     <td className="text-on-surface-variant px-6 py-4">
                       {formatDate(payment.date)}
@@ -301,32 +307,14 @@ export default function PaymentsPage() {
           </table>
         </div>
 
-        {!loading && payments.length > 0 && (
-          <footer className="border-outline-variant bg-surface-container-high mt-auto flex items-center justify-between border-t-[0.5px] px-6 py-4">
-            <span className="text-body-md text-on-surface-variant">
-              Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, payments.length)} of{' '}
-              {payments.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="border-outline-variant text-on-surface-variant rounded border-[0.5px] p-2 disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-              <span className="text-body-md text-on-surface-variant px-2">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="border-outline-variant text-on-surface-variant rounded border-[0.5px] p-2 disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
-          </footer>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

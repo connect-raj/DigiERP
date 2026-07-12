@@ -1,12 +1,17 @@
-import { NextRequest } from 'next/server'; // NextRequest used in create and update
+import { NextRequest } from 'next/server';
 import { categoryService } from '@/services/category.service';
 import { createCategorySchema, updateCategorySchema } from '@/validations/category';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 
 export class CategoryController {
-  async getAll() {
-    const categories = await categoryService.getAll();
-    return successResponse(categories);
+  async getAll(req: NextRequest) {
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search') ?? undefined;
+    const { page, limit, skip, take } = parsePagination(searchParams);
+
+    const { data, total, avgGstRate } = await categoryService.getAll({ search, skip, take });
+    return paginatedResponse(data, { page, limit, total }, { summary: { total, avgGstRate } });
   }
 
   async getById(id: string) {

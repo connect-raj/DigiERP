@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client';
 import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
 
 export class CustomerRepository {
-  async findAll(search?: string) {
+  async findAll(params: { search?: string; skip?: number; take?: number }) {
+    const { search, skip, take } = params;
     const where: Prisma.CustomerWhereInput = search
       ? {
           OR: [
@@ -14,10 +15,17 @@ export class CustomerRepository {
         }
       : {};
 
-    return prisma.customer.findMany({
-      where,
-      orderBy: { firmName: 'asc' },
-    });
+    const [data, total] = await Promise.all([
+      prisma.customer.findMany({
+        where,
+        orderBy: { firmName: 'asc' },
+        skip,
+        take,
+      }),
+      prisma.customer.count({ where }),
+    ]);
+
+    return { data, total };
   }
 
   async findById(id: string) {
