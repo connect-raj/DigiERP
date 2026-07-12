@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { COMPANY_STATE } from '@/lib/constants';
+import { hashPassword } from '@/lib/auth-utils';
 
 interface CategorySeed {
   name: string;
@@ -119,6 +120,22 @@ async function main(): Promise<void> {
     console.log('Seeded default settings row.');
   } else {
     console.log('Settings row already exists, skipping.');
+  }
+
+  console.log('Seeding admin user...');
+
+  const existingAdmin = await prisma.user.findUnique({ where: { username: 'admin' } });
+  if (!existingAdmin) {
+    await prisma.user.create({
+      data: {
+        username: 'admin',
+        passwordHash: hashPassword('Admin@123'),
+        role: 'admin',
+      },
+    });
+    console.log('Seeded admin user.');
+  } else {
+    console.log('Admin user already exists, skipping.');
   }
 
   console.log('Seeding complete.');
