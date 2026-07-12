@@ -138,6 +138,8 @@ export class DashboardService {
         productName: product.name,
         currentStock: Number(product.currentStock),
         lowerStockLimit: Number(product.lowerStockLimit),
+        categoryId: product.category.id,
+        categoryName: product.category.name,
       }));
   }
 

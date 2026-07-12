@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SalesChart from './_components/dashboard/SalesChart';
 import TopCategoryChart from './_components/dashboard/TopCategoryChart';
+import LowStockAlerts from './_components/dashboard/LowStockAlerts';
+import EmptyState from './_components/dashboard/EmptyState';
 import type { ActivityType, DashboardPeriod, DashboardResponse } from './_lib/dashboard-types';
 
 function formatINR(val: number) {
@@ -83,15 +85,6 @@ function Card({
         <h3 className="text-body-md text-on-surface font-semibold">{title}</h3>
       </div>
       <div className="flex-1 p-5">{children}</div>
-    </div>
-  );
-}
-
-function EmptyState({ icon, message }: { icon: string; message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 py-8">
-      <span className="material-symbols-outlined text-on-surface-variant text-[32px]">{icon}</span>
-      <p className="text-body-md text-on-surface-variant">{message}</p>
     </div>
   );
 }
@@ -265,28 +258,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card title="Low Stock Alerts" icon="inventory_2">
-              {dashboard.lowStock.length === 0 ? (
-                <EmptyState icon="task_alt" message="All products are above their stock limit." />
-              ) : (
-                <ul className="divide-outline-variant divide-y-[0.5px]">
-                  {dashboard.lowStock.map((p) => (
-                    <li
-                      key={p.productId}
-                      className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
-                    >
-                      <button
-                        onClick={() => router.push('/products')}
-                        className="text-on-surface hover:text-primary text-body-md text-left transition-colors"
-                      >
-                        {p.productName}
-                      </button>
-                      <span className="text-error text-data-tabular font-semibold">
-                        {p.currentStock} / {p.lowerStockLimit}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <LowStockAlerts data={dashboard.lowStock} />
             </Card>
 
             <Card title="Credit Health" icon="credit_card">

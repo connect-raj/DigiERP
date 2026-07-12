@@ -48,7 +48,13 @@ export class DashboardRepository {
   async findActiveProducts() {
     return prisma.product.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, currentStock: true, lowerStockLimit: true },
+      select: {
+        id: true,
+        name: true,
+        currentStock: true,
+        lowerStockLimit: true,
+        category: { select: { id: true, name: true } },
+      },
     });
   }
 

@@ -1,13 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const isRouteActive = (route: string) => {
     return pathname.startsWith(route);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (error) {
+      console.error('Failed to log out', error);
+    }
+    router.push('/login');
   };
 
   return (
@@ -146,7 +156,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <div className="mt-8 mt-auto w-full border-t-[0.5px] border-[#333] px-5 pt-8">
+      <div className="mt-8 mt-auto flex w-full flex-col space-y-1 border-t-[0.5px] border-[#333] px-5 pt-8">
         <div
           className="text-on-surface-variant hover:text-primary flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 hover:bg-[#252525]"
           title="Settings"
@@ -154,6 +164,15 @@ export default function Sidebar() {
           <span className="material-symbols-outlined text-[20px]">settings</span>
           <span className="text-[13px] font-medium">Settings</span>
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="text-on-surface-variant hover:text-primary flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left transition-all duration-200 hover:bg-[#252525]"
+          title="Logout"
+        >
+          <span className="material-symbols-outlined text-[20px]">logout</span>
+          <span className="text-[13px] font-medium">Logout</span>
+        </button>
       </div>
     </nav>
   );

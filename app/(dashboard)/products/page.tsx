@@ -20,6 +20,7 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export default function ProductsPage() {
       setLoading(true);
       const url = new URL('/api/products', window.location.origin);
       if (search) url.searchParams.append('search', search);
+      if (categoryId) url.searchParams.append('categoryId', categoryId);
 
       const [prodRes, catRes] = await Promise.all([
         fetch(url.toString()),
@@ -164,7 +166,7 @@ export default function ProductsPage() {
   useEffect(() => {
     // eslint-disable-next-line
     fetchProducts();
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col gap-8">
@@ -192,9 +194,22 @@ export default function ProductsPage() {
         </div>
         {/* Filters */}
         <div className="flex gap-4 md:col-span-12">
-          <div className="group relative flex flex-1 cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
-            <span className="font-body-md text-[13px] text-[#c4c7c8]">Category: All</span>
-            <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
+          <div className="group relative flex flex-1 items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
+            <select
+              className="font-body-md h-full w-full cursor-pointer appearance-none border-none bg-transparent text-[13px] text-[#c4c7c8] outline-none"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
+              <option value="">Category: All</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <span className="material-symbols-outlined pointer-events-none text-[#8e9192]">
+              arrow_drop_down
+            </span>
           </div>
           <div className="group relative flex flex-1 cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
             <span className="font-body-md text-[13px] text-[#c4c7c8]">Status: Active</span>
