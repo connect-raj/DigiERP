@@ -9,7 +9,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="ml-[260px] flex h-screen flex-1 flex-col overflow-hidden bg-[#181818]">
         <Header />
         <main className="mt-[88px] flex-1 overflow-y-auto bg-[#181818] p-10">
-          <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-8">{children}</div>
+          <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>

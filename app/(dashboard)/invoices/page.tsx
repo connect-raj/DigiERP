@@ -22,7 +22,7 @@ type Invoice = {
 
 type Customer = { id: string; firmName: string };
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {
@@ -126,7 +126,7 @@ export default function InvoicesPage() {
   }, [search, customerFilter, statusFilter, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-3">

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 
 type Product = {
   id: string;
@@ -193,7 +193,7 @@ export default function ProductsPage() {
   }, [search, categoryId, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-8">
+    <div className="flex min-h-full flex-col gap-8">
       {/* Controls Container */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
         {/* Search */}

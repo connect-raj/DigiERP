@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 
 type Vendor = {
   id: string;
@@ -183,7 +183,7 @@ export default function VendorsPage() {
   }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-8">
+    <div className="flex min-h-full flex-col gap-8">
       {/* Header and Controls */}
       <div className="grid grid-cols-1 items-end gap-6 md:grid-cols-12">
         <div className="flex flex-col gap-4 md:col-span-5">

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import CustomerFormDrawer, { Customer } from './_components/CustomerFormDrawer';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {
@@ -76,7 +76,7 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div className="flex items-center gap-4">
           <h1 className="font-headline-md text-headline-md text-primary">Customers</h1>

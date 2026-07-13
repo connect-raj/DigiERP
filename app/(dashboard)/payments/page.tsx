@@ -23,7 +23,7 @@ type Payment = {
 
 type Customer = { id: string; firmName: string };
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 const MODES = ['ALL', 'CASH', 'BANK_TRANSFER', 'CHEQUE', 'UPI', 'OTHER'];
 
 function formatINR(val: string | number) {
@@ -119,7 +119,7 @@ export default function PaymentsPage() {
   }, [search, customerFilter, modeFilter, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-3">

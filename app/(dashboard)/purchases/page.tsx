@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 
 type Vendor = {
   id: string;
@@ -118,7 +118,7 @@ export default function PurchasesPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       {/* Header Area */}
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div className="flex items-center gap-4">

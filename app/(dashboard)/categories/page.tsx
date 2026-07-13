@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 
 type Category = {
   id: string;
@@ -153,7 +153,7 @@ export default function CategoriesPage() {
   }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-8">
+    <div className="flex min-h-full flex-col gap-8">
       {/* Header Section */}
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
