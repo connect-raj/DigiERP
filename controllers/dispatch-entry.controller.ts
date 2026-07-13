@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DocStatus } from '@prisma/client';
 import { dispatchEntryService } from '@/services/dispatch-entry.service';
 import { createDispatchEntrySchema } from '@/validations/dispatch-entry';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 
 export class DispatchEntryController {
   async getAll(req: NextRequest) {
@@ -13,22 +14,25 @@ export class DispatchEntryController {
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const search = searchParams.get('search') ?? undefined;
+    const { page, limit, skip, take } = parsePagination(searchParams);
 
-    const entries = await dispatchEntryService.getAll({
+    const { data, total } = await dispatchEntryService.getAll({
       customerId,
       status: statusParam ? (statusParam as DocStatus) : undefined,
       isCancelled: isCancelledParam !== null ? isCancelledParam === 'true' : false,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
       search,
+      skip,
+      take,
     });
 
-    const formatted = entries.map((entry) => {
+    const formatted = data.map((entry) => {
       const { _count, ...rest } = entry;
       return { ...rest, itemCount: _count.items };
     });
 
-    return successResponse(formatted);
+    return paginatedResponse(formatted, { page, limit, total });
   }
 
   async getById(_req: NextRequest, id: string) {

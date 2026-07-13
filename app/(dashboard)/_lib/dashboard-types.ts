@@ -22,6 +22,8 @@ export interface LowStockProduct {
   productName: string;
   currentStock: number;
   lowerStockLimit: number;
+  categoryId: string;
+  categoryName: string;
 }
 
 export interface BreachedCustomer {

@@ -62,3 +62,13 @@ export function getPeriodRange(
     end: fromIstShifted(new Date(Date.UTC(fyStartYear + 1, fyStartMonthIndex, 1))),
   };
 }
+
+/** Formats the current financial year as e.g. "FY 2026-27", per getPeriodRange's FY math. */
+export function getFinancialYearLabel(
+  date: Date = new Date(),
+  financialYearStartMonth: number = 4
+): string {
+  const { start } = getPeriodRange('fy', date, financialYearStartMonth);
+  const startYear = getIstDateParts(start).year;
+  return `FY ${startYear}-${String(startYear + 1).slice(-2)}`;
+}

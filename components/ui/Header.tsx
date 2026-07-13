@@ -2,9 +2,11 @@
 
 import { usePathname } from 'next/navigation';
 import React from 'react';
+import { getFinancialYearLabel } from '@/lib/period';
 
 export default function Header() {
   const pathname = usePathname();
+  const financialYearLabel = getFinancialYearLabel();
 
   const getPageTitle = () => {
     if (pathname.startsWith('/products')) return 'Products';
@@ -21,7 +23,7 @@ export default function Header() {
       <div className="font-body-md flex items-center gap-4 text-sm">
         <div className="mr-2 flex items-center gap-2">
           <span className="cursor-pointer rounded-md border-[0.5px] border-[#333] bg-[#222] px-3.5 py-1.5 text-[12px] font-medium text-[#c4c7c8] transition-all hover:bg-[#2a2a2a]">
-            FY 2023-24
+            {financialYearLabel}
           </span>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full border-[0.5px] border-[#333] bg-[#222]">

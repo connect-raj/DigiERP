@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Pagination from '@/components/ui/Pagination';
 
 type InvoiceCustomer = { id: string; firmName: string };
 
@@ -21,7 +22,7 @@ type Invoice = {
 
 type Customer = { id: string; firmName: string };
 
-const PAGE_SIZE = 20;
+const PAGE_LIMIT = 5;
 
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {
@@ -62,9 +63,17 @@ export default function InvoicesPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [stats, setStats] = useState({
+    totalInvoiced: 0,
+    outstanding: 0,
+    paid: 0,
+    pendingCount: 0,
+  });
 
   useEffect(() => {
-    fetch('/api/customers')
+    // Filter dropdown needs the full list, not a paginated page.
+    fetch('/api/customers?limit=1000')
       .then((res) => res.json())
       .then((data) => {
         if (data.data) setCustomers(data.data);
@@ -81,10 +90,24 @@ export default function InvoicesPage() {
       if (statusFilter !== 'ALL') url.searchParams.append('paymentStatus', statusFilter);
       if (fromDate) url.searchParams.append('from', new Date(fromDate).toISOString());
       if (toDate) url.searchParams.append('to', new Date(toDate).toISOString());
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
 
       const res = await fetch(url.toString());
       const data = await res.json();
-      if (data.data) setInvoices(data.data);
+      if (data.data) {
+        setInvoices(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
+        setStats({
+          totalInvoiced: data.summary?.totalInvoiced ?? 0,
+          outstanding: data.summary?.outstanding ?? 0,
+          paid: data.summary?.paid ?? 0,
+          pendingCount: data.summary?.pendingCount ?? 0,
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch invoices', error);
     } finally {
@@ -95,35 +118,15 @@ export default function InvoicesPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-    fetchInvoices();
   }, [search, customerFilter, statusFilter, fromDate, toDate]);
 
-  const stats = useMemo(() => {
-    let totalInvoiced = 0;
-    let outstanding = 0;
-    let paid = 0;
-    let pendingCount = 0;
-
-    invoices.forEach((inv) => {
-      const total = Number(inv.totalAmount);
-      const paidAmt = Number(inv.paidAmount);
-      totalInvoiced += total;
-      paid += paidAmt;
-      if (inv.paymentStatus !== 'PAID') {
-        outstanding += total - paidAmt;
-        pendingCount += 1;
-      }
-    });
-
-    return { totalInvoiced, outstanding, paid, pendingCount };
-  }, [invoices]);
-
-  const totalPages = Math.max(1, Math.ceil(invoices.length / PAGE_SIZE));
-  const paginated = invoices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    // eslint-disable-next-line
+    fetchInvoices();
+  }, [search, customerFilter, statusFilter, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-3">
@@ -244,7 +247,7 @@ export default function InvoicesPage() {
                     ))}
                   </tr>
                 ))
-              ) : paginated.length === 0 ? (
+              ) : pagination.total === 0 ? (
                 <tr>
                   <td colSpan={9} className="p-12 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -256,7 +259,7 @@ export default function InvoicesPage() {
                   </td>
                 </tr>
               ) : (
-                paginated.map((invoice) => (
+                invoices.map((invoice) => (
                   <tr key={invoice.id} className="bg-surface transition-colors hover:bg-[#1e1e1e]">
                     <td className="text-primary px-6 py-4 font-mono">{invoice.invoiceNo}</td>
                     <td className="text-on-surface-variant px-6 py-4">
@@ -318,32 +321,14 @@ export default function InvoicesPage() {
           </table>
         </div>
 
-        {!loading && invoices.length > 0 && (
-          <footer className="border-outline-variant bg-surface-container-high mt-auto flex items-center justify-between border-t-[0.5px] px-6 py-4">
-            <span className="text-body-md text-on-surface-variant">
-              Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, invoices.length)} of{' '}
-              {invoices.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="border-outline-variant text-on-surface-variant rounded border-[0.5px] p-2 disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-              <span className="text-body-md text-on-surface-variant px-2">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="border-outline-variant text-on-surface-variant rounded border-[0.5px] p-2 disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
-          </footer>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
         )}
       </div>
     </div>

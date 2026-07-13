@@ -8,6 +8,8 @@ export interface PaymentFilters {
   from?: Date;
   to?: Date;
   search?: string;
+  skip?: number;
+  take?: number;
 }
 
 export interface CreatePaymentData {
@@ -58,29 +60,50 @@ export interface AllocateBatchResult {
   updatedPayments: UpdatedPaymentResult[];
 }
 
+function buildPaymentWhere(filters: PaymentFilters): Prisma.PaymentWhereInput {
+  const { customerId, mode, from, to, search } = filters;
+
+  const where: Prisma.PaymentWhereInput = {};
+  if (customerId) where.customerId = customerId;
+  if (mode) where.mode = mode;
+  if (from || to) {
+    where.date = {};
+    if (from) where.date.gte = from;
+    if (to) where.date.lte = to;
+  }
+  if (search) {
+    where.reference = { contains: search, mode: 'insensitive' };
+  }
+  return where;
+}
+
 export class PaymentRepository {
   async findAll(filters: PaymentFilters) {
-    const { customerId, mode, from, to, search } = filters;
+    const where = buildPaymentWhere(filters);
 
-    const where: Prisma.PaymentWhereInput = {};
-    if (customerId) where.customerId = customerId;
-    if (mode) where.mode = mode;
-    if (from || to) {
-      where.date = {};
-      if (from) where.date.gte = from;
-      if (to) where.date.lte = to;
-    }
-    if (search) {
-      where.reference = { contains: search, mode: 'insensitive' };
-    }
+    const [data, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, firmName: true } },
+          recordedBy: { select: { id: true, username: true } },
+        },
+        orderBy: { date: 'desc' },
+        skip: filters.skip,
+        take: filters.take,
+      }),
+      prisma.payment.count({ where }),
+    ]);
 
+    return { data, total };
+  }
+
+  /** Narrow, unbounded query over the same filters — powers the stat tiles without paging. */
+  async findStatsRows(filters: PaymentFilters) {
+    const where = buildPaymentWhere(filters);
     return prisma.payment.findMany({
       where,
-      include: {
-        customer: { select: { id: true, firmName: true } },
-        recordedBy: { select: { id: true, username: true } },
-      },
-      orderBy: { date: 'desc' },
+      select: { amount: true, unallocatedAmount: true },
     });
   }
 

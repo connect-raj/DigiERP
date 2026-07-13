@@ -7,7 +7,7 @@ import {
 } from '@/validations/vendor';
 
 export class VendorService {
-  async getAll(params: { isActive?: boolean; search?: string }) {
+  async getAll(params: { isActive?: boolean; search?: string; skip?: number; take?: number }) {
     return vendorRepository.findAll(params);
   }
 

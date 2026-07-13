@@ -2,27 +2,29 @@ import { NextRequest } from 'next/server';
 import { PaymentMode } from '@prisma/client';
 import { paymentService } from '@/services/payment.service';
 import { createPaymentSchema, allocatePaymentsSchema } from '@/validations/payment';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
 import { authenticate } from '@/controllers/user.controller';
+import { parsePagination } from '@/lib/pagination';
+import { PaymentFilters } from '@/repositories/payment.repository';
 
 export class PaymentController {
   async getAll(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const customerId = searchParams.get('customerId') ?? undefined;
-    const modeParam = searchParams.get('mode');
-    const from = searchParams.get('from');
-    const to = searchParams.get('to');
-    const search = searchParams.get('search') ?? undefined;
+    const filters: PaymentFilters = {
+      customerId: searchParams.get('customerId') ?? undefined,
+      mode: (searchParams.get('mode') as PaymentMode) ?? undefined,
+      from: searchParams.get('from') ? new Date(searchParams.get('from')!) : undefined,
+      to: searchParams.get('to') ? new Date(searchParams.get('to')!) : undefined,
+      search: searchParams.get('search') ?? undefined,
+    };
+    const { page, limit, skip, take } = parsePagination(searchParams);
 
-    const payments = await paymentService.getAll({
-      customerId,
-      mode: modeParam ? (modeParam as PaymentMode) : undefined,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
-      search,
-    });
+    const [{ data, total }, summary] = await Promise.all([
+      paymentService.getAll({ ...filters, skip, take }),
+      paymentService.getSummary(filters),
+    ]);
 
-    return successResponse(payments);
+    return paginatedResponse(data, { page, limit, total }, { summary });
   }
 
   async getById(_req: NextRequest, id: string) {

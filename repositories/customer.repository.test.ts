@@ -6,6 +6,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     customer: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -23,28 +24,45 @@ describe('CustomerRepository', () => {
   });
 
   describe('findAll', () => {
+    beforeEach(() => {
+      vi.mocked(prisma.customer.count).mockResolvedValue(0);
+    });
+
     it('uses an empty where clause when no search term is given', async () => {
       vi.mocked(prisma.customer.findMany).mockResolvedValue([]);
-      await customerRepository.findAll();
+      await customerRepository.findAll({});
       expect(prisma.customer.findMany).toHaveBeenCalledWith({
         where: {},
         orderBy: { firmName: 'asc' },
+        skip: undefined,
+        take: undefined,
       });
     });
 
     it('searches across firmName, gstin, and city when a search term is given', async () => {
       vi.mocked(prisma.customer.findMany).mockResolvedValue([]);
-      await customerRepository.findAll('acme');
-      expect(prisma.customer.findMany).toHaveBeenCalledWith({
-        where: {
-          OR: [
-            { firmName: { contains: 'acme', mode: 'insensitive' } },
-            { gstin: { contains: 'acme', mode: 'insensitive' } },
-            { city: { contains: 'acme', mode: 'insensitive' } },
-          ],
-        },
-        orderBy: { firmName: 'asc' },
-      });
+      await customerRepository.findAll({ search: 'acme' });
+      expect(prisma.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [
+              { firmName: { contains: 'acme', mode: 'insensitive' } },
+              { gstin: { contains: 'acme', mode: 'insensitive' } },
+              { city: { contains: 'acme', mode: 'insensitive' } },
+            ],
+          },
+        })
+      );
+    });
+
+    it('returns total count alongside data', async () => {
+      vi.mocked(prisma.customer.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.customer.count).mockResolvedValue(5);
+      const result = await customerRepository.findAll({ skip: 10, take: 10 });
+      expect(prisma.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
+      );
+      expect(result).toEqual({ data: [], total: 5 });
     });
   });
 

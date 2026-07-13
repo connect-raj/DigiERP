@@ -10,6 +10,8 @@ export interface InvoiceFilters {
   from?: Date;
   to?: Date;
   search?: string;
+  skip?: number;
+  take?: number;
 }
 
 export interface CreateInvoiceItemInput {
@@ -45,29 +47,50 @@ export interface CreateInvoiceData {
   };
 }
 
+function buildInvoiceWhere(filters: InvoiceFilters): Prisma.InvoiceWhereInput {
+  const { customerId, paymentStatus, from, to, search } = filters;
+
+  const where: Prisma.InvoiceWhereInput = {};
+  if (customerId) where.customerId = customerId;
+  if (paymentStatus) where.paymentStatus = paymentStatus;
+  if (from || to) {
+    where.date = {};
+    if (from) where.date.gte = from;
+    if (to) where.date.lte = to;
+  }
+  if (search) {
+    where.invoiceNo = { contains: search, mode: 'insensitive' };
+  }
+  return where;
+}
+
 export class InvoiceRepository {
   async findAll(filters: InvoiceFilters) {
-    const { customerId, paymentStatus, from, to, search } = filters;
+    const where = buildInvoiceWhere(filters);
 
-    const where: Prisma.InvoiceWhereInput = {};
-    if (customerId) where.customerId = customerId;
-    if (paymentStatus) where.paymentStatus = paymentStatus;
-    if (from || to) {
-      where.date = {};
-      if (from) where.date.gte = from;
-      if (to) where.date.lte = to;
-    }
-    if (search) {
-      where.invoiceNo = { contains: search, mode: 'insensitive' };
-    }
+    const [data, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, firmName: true } },
+          dispatchEntry: { select: { id: true, challanNo: true } },
+        },
+        orderBy: { date: 'desc' },
+        skip: filters.skip,
+        take: filters.take,
+      }),
+      prisma.invoice.count({ where }),
+    ]);
 
+    return { data, total };
+  }
+
+  /** Narrow, unbounded query over the same filters — powers the stat tiles without paging. */
+  async findStatsRows(filters: InvoiceFilters) {
+    const where = buildInvoiceWhere(filters);
     return prisma.invoice.findMany({
       where,
-      include: {
-        customer: { select: { id: true, firmName: true } },
-        dispatchEntry: { select: { id: true, challanNo: true } },
-      },
-      orderBy: { date: 'desc' },
+      select: { totalAmount: true, paidAmount: true, paymentStatus: true },
     });
   }
 

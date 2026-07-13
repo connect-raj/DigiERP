@@ -2,27 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PaymentStatus } from '@prisma/client';
 import { invoiceService } from '@/services/invoice.service';
 import { createInvoiceSchema } from '@/validations/invoice';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 import { renderInvoicePdf, InvoiceSnapshot } from '@/lib/invoice-pdf';
+import { InvoiceFilters } from '@/repositories/invoice.repository';
 
 export class InvoiceController {
   async getAll(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const customerId = searchParams.get('customerId') ?? undefined;
-    const paymentStatusParam = searchParams.get('paymentStatus');
-    const from = searchParams.get('from');
-    const to = searchParams.get('to');
-    const search = searchParams.get('search') ?? undefined;
+    const filters: InvoiceFilters = {
+      customerId: searchParams.get('customerId') ?? undefined,
+      paymentStatus: (searchParams.get('paymentStatus') as PaymentStatus) ?? undefined,
+      from: searchParams.get('from') ? new Date(searchParams.get('from')!) : undefined,
+      to: searchParams.get('to') ? new Date(searchParams.get('to')!) : undefined,
+      search: searchParams.get('search') ?? undefined,
+    };
+    const { page, limit, skip, take } = parsePagination(searchParams);
 
-    const invoices = await invoiceService.getAll({
-      customerId,
-      paymentStatus: paymentStatusParam ? (paymentStatusParam as PaymentStatus) : undefined,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
-      search,
-    });
+    const [{ data, total }, summary] = await Promise.all([
+      invoiceService.getAll({ ...filters, skip, take }),
+      invoiceService.getSummary(filters),
+    ]);
 
-    return successResponse(invoices);
+    return paginatedResponse(data, { page, limit, total }, { summary });
   }
 
   async getById(_req: NextRequest, id: string) {

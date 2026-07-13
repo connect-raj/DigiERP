@@ -66,11 +66,16 @@ describe('DashboardRepository', () => {
     );
   });
 
-  it('findActiveProducts only returns active products', async () => {
+  it('findActiveProducts only returns active products and includes category', async () => {
     vi.mocked(prisma.product.findMany).mockResolvedValue([]);
     await dashboardRepository.findActiveProducts();
     expect(prisma.product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { isActive: true } })
+      expect.objectContaining({
+        where: { isActive: true },
+        select: expect.objectContaining({
+          category: { select: { id: true, name: true } },
+        }),
+      })
     );
   });
 

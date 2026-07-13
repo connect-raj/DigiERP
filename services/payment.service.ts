@@ -8,6 +8,25 @@ export class PaymentService {
     return paymentRepository.findAll(filters);
   }
 
+  async getSummary(filters: PaymentFilters) {
+    const rows = await paymentRepository.findStatsRows(filters);
+
+    let totalReceived = 0;
+    let totalUnallocated = 0;
+
+    for (const row of rows) {
+      totalReceived += Number(row.amount);
+      totalUnallocated += Number(row.unallocatedAmount);
+    }
+
+    return {
+      totalReceived,
+      totalAllocated: totalReceived - totalUnallocated,
+      totalUnallocated,
+      count: rows.length,
+    };
+  }
+
   async getById(id: string) {
     const payment = await paymentRepository.findById(id);
     if (!payment) {

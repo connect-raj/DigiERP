@@ -82,7 +82,8 @@ export default function AllocatePaymentsModal({
         setLoading(true);
         const [paymentsRes, invoicesRes] = await Promise.all([
           fetch(`/api/customers/${customerId}/payments`),
-          fetch(`/api/invoices?customerId=${customerId}`),
+          // Allocation picker needs every outstanding invoice, not a paginated page.
+          fetch(`/api/invoices?customerId=${customerId}&limit=1000`),
         ]);
         const paymentsData = await paymentsRes.json();
         const invoicesData = await invoicesRes.json();

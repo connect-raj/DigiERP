@@ -26,6 +26,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${hankenGrotesk.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         <link

@@ -8,6 +8,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     invoice: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
     },
@@ -93,6 +94,10 @@ describe('InvoiceRepository', () => {
   });
 
   describe('findAll', () => {
+    beforeEach(() => {
+      vi.mocked(prisma.invoice.count).mockResolvedValue(0);
+    });
+
     it('filters by invoiceNo when search is provided', async () => {
       vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
       await invoiceRepository.findAll({ search: 'INV-2627' });
@@ -102,6 +107,27 @@ describe('InvoiceRepository', () => {
           orderBy: { date: 'desc' },
         })
       );
+    });
+
+    it('returns total count alongside data and applies skip/take', async () => {
+      vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.invoice.count).mockResolvedValue(7);
+      const result = await invoiceRepository.findAll({ skip: 10, take: 10 });
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
+      );
+      expect(result).toEqual({ data: [], total: 7 });
+    });
+  });
+
+  describe('findStatsRows', () => {
+    it('selects only the fields needed for stat aggregation, unbounded', async () => {
+      vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
+      await invoiceRepository.findStatsRows({ search: 'INV-2627' });
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith({
+        where: { invoiceNo: { contains: 'INV-2627', mode: 'insensitive' } },
+        select: { totalAmount: true, paidAmount: true, paymentStatus: true },
+      });
     });
   });
 

@@ -3,7 +3,8 @@ import prisma from '@/lib/prisma';
 import { Prisma, PaymentStatus } from '@prisma/client';
 import { z } from 'zod';
 import { asyncHandler } from '@/lib/asyncHandler';
-import { successResponse, BadRequestError, NotFoundError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError, NotFoundError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 import { generatePurchaseNo } from '@/lib/purchase-no';
 import { determineGstType } from '@/lib/gst';
 
@@ -52,27 +53,61 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     ];
   }
 
-  const purchases = await prisma.purchase.findMany({
-    where,
-    include: {
-      vendor: {
-        select: { id: true, name: true },
+  const { page, limit, skip, take } = parsePagination(searchParams);
+
+  const [purchases, total, statsRows] = await Promise.all([
+    prisma.purchase.findMany({
+      where,
+      include: {
+        vendor: {
+          select: { id: true, name: true },
+        },
+        _count: {
+          select: { items: true },
+        },
       },
-      _count: {
-        select: { items: true },
+      orderBy: {
+        date: 'desc',
       },
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
+      skip,
+      take,
+    }),
+    prisma.purchase.count({ where }),
+    // Narrow, unbounded query over the same filters — powers the stat tiles without paging.
+    prisma.purchase.findMany({
+      where,
+      select: {
+        totalAmount: true,
+        paidAmount: true,
+        vendorId: true,
+        expectedDeliveryDate: true,
+        receivedDate: true,
+      },
+    }),
+  ]);
 
   const formattedPurchases = purchases.map((p) => ({
     ...p,
     itemCount: p._count.items,
   }));
 
-  return successResponse(formattedPurchases);
+  const totalValue = statsRows.reduce((acc, p) => acc + Number(p.totalAmount), 0);
+  const pendingPayments = statsRows.reduce(
+    (acc, p) => acc + (Number(p.totalAmount) - Number(p.paidAmount)),
+    0
+  );
+  const activeVendors = new Set(statsRows.map((p) => p.vendorId)).size;
+  const totalExpected = statsRows.filter((p) => p.expectedDeliveryDate).length;
+  const fulfilled = statsRows.filter(
+    (p) => p.expectedDeliveryDate && p.receivedDate && p.receivedDate <= p.expectedDeliveryDate
+  ).length;
+  const procurementHealth = totalExpected > 0 ? Math.round((fulfilled / totalExpected) * 100) : 100;
+
+  return paginatedResponse(
+    formattedPurchases,
+    { page, limit, total },
+    { summary: { totalValue, pendingPayments, activeVendors, procurementHealth } }
+  );
 });
 
 export const POST = asyncHandler(async (request: NextRequest) => {

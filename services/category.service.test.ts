@@ -29,11 +29,15 @@ describe('CategoryService', () => {
   });
 
   describe('getAll', () => {
-    it('should return all categories', async () => {
-      vi.spyOn(categoryRepository, 'findAll').mockResolvedValue([mockCategory as never]);
-      const result = await categoryService.getAll();
-      expect(categoryRepository.findAll).toHaveBeenCalled();
-      expect(result).toHaveLength(1);
+    it('should return all categories with total and avg GST rate', async () => {
+      vi.spyOn(categoryRepository, 'findAll').mockResolvedValue({
+        data: [mockCategory as never],
+        total: 1,
+        avgGstRate: 18,
+      });
+      const result = await categoryService.getAll({});
+      expect(categoryRepository.findAll).toHaveBeenCalledWith({});
+      expect(result).toEqual({ data: [mockCategory], total: 1, avgGstRate: 18 });
     });
   });
 

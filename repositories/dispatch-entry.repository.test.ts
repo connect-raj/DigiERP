@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     dispatchEntry: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -39,6 +40,10 @@ describe('DispatchEntryRepository', () => {
   });
 
   describe('findAll', () => {
+    beforeEach(() => {
+      vi.mocked(prisma.dispatchEntry.count).mockResolvedValue(0);
+    });
+
     it('defaults to isCancelled false and orders by date desc', async () => {
       vi.mocked(prisma.dispatchEntry.findMany).mockResolvedValue([]);
       await dispatchEntryRepository.findAll({});
@@ -73,6 +78,16 @@ describe('DispatchEntryRepository', () => {
           },
         })
       );
+    });
+
+    it('returns total count alongside data and applies skip/take', async () => {
+      vi.mocked(prisma.dispatchEntry.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.dispatchEntry.count).mockResolvedValue(3);
+      const result = await dispatchEntryRepository.findAll({ skip: 10, take: 10 });
+      expect(prisma.dispatchEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
+      );
+      expect(result).toEqual({ data: [], total: 3 });
     });
   });
 

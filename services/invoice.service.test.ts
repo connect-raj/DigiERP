@@ -8,6 +8,7 @@ import { CreateInvoiceInput } from '@/validations/invoice';
 vi.mock('@/repositories/invoice.repository', () => ({
   invoiceRepository: {
     findAll: vi.fn(),
+    findStatsRows: vi.fn(),
     findById: vi.fn(),
     findSnapshotById: vi.fn(),
     findDispatchEntryForInvoicing: vi.fn(),
@@ -157,6 +158,25 @@ describe('InvoiceService', () => {
     it('throws NotFoundError when the invoice does not exist', async () => {
       vi.spyOn(invoiceRepository, 'findSnapshotById').mockResolvedValue(null);
       await expect(invoiceService.getSnapshotById('missing')).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('getSummary', () => {
+    it('sums invoiced/paid and treats non-PAID rows as outstanding', async () => {
+      vi.spyOn(invoiceRepository, 'findStatsRows').mockResolvedValue([
+        { totalAmount: 1000, paidAmount: 1000, paymentStatus: 'PAID' },
+        { totalAmount: 500, paidAmount: 200, paymentStatus: 'PARTIAL' },
+        { totalAmount: 300, paidAmount: 0, paymentStatus: 'UNPAID' },
+      ] as never);
+
+      const result = await invoiceService.getSummary({});
+
+      expect(result).toEqual({
+        totalInvoiced: 1800,
+        outstanding: 600,
+        paid: 1200,
+        pendingCount: 2,
+      });
     });
   });
 });

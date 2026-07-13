@@ -2,24 +2,33 @@ import prisma from '@/lib/prisma';
 import { CreateVendorInput, UpdateVendorInput } from '@/validations/vendor';
 
 export class VendorRepository {
-  async findAll(params: { isActive?: boolean; search?: string }) {
-    const { isActive, search } = params;
-    return prisma.vendor.findMany({
-      where: {
-        ...(isActive !== undefined && { isActive }),
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-          ],
-        }),
-      },
-      include: {
-        _count: { select: { vendorProducts: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(params: { isActive?: boolean; search?: string; skip?: number; take?: number }) {
+    const { isActive, search, skip, take } = params;
+    const where = {
+      ...(isActive !== undefined && { isActive }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { phone: { contains: search, mode: 'insensitive' as const } },
+          { email: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.vendor.findMany({
+        where,
+        include: {
+          _count: { select: { vendorProducts: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.vendor.count({ where }),
+    ]);
+
+    return { data, total };
   }
 
   async findById(id: string) {

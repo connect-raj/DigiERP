@@ -167,17 +167,44 @@ describe('DashboardService', () => {
     it('flags products at or below their lower stock limit', async () => {
       vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
       mockEmptyRepo();
+      const inkCategory = { id: 'cat-ink', name: 'Ink' };
       vi.spyOn(dashboardRepository, 'findActiveProducts').mockResolvedValue([
-        { id: 'p1', name: 'Ink Red', currentStock: 5, lowerStockLimit: 10 },
-        { id: 'p2', name: 'Ink Blue', currentStock: 20, lowerStockLimit: 10 },
-        { id: 'p3', name: 'Ink Black', currentStock: 10, lowerStockLimit: 10 },
+        { id: 'p1', name: 'Ink Red', currentStock: 5, lowerStockLimit: 10, category: inkCategory },
+        {
+          id: 'p2',
+          name: 'Ink Blue',
+          currentStock: 20,
+          lowerStockLimit: 10,
+          category: inkCategory,
+        },
+        {
+          id: 'p3',
+          name: 'Ink Black',
+          currentStock: 10,
+          lowerStockLimit: 10,
+          category: inkCategory,
+        },
       ] as never);
 
       const result = await dashboardService.getDashboard('month');
 
       expect(result.lowStock).toEqual([
-        { productId: 'p1', productName: 'Ink Red', currentStock: 5, lowerStockLimit: 10 },
-        { productId: 'p3', productName: 'Ink Black', currentStock: 10, lowerStockLimit: 10 },
+        {
+          productId: 'p1',
+          productName: 'Ink Red',
+          currentStock: 5,
+          lowerStockLimit: 10,
+          categoryId: 'cat-ink',
+          categoryName: 'Ink',
+        },
+        {
+          productId: 'p3',
+          productName: 'Ink Black',
+          currentStock: 10,
+          lowerStockLimit: 10,
+          categoryId: 'cat-ink',
+          categoryName: 'Ink',
+        },
       ]);
     });
   });

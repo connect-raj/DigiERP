@@ -50,7 +50,8 @@ export default function RecordPaymentModal({
 
   useEffect(() => {
     if (!isOpen || lockedCustomerId) return;
-    fetch('/api/customers')
+    // Customer picker needs the full list, not a paginated page.
+    fetch('/api/customers?limit=1000')
       .then((res) => res.json())
       .then((data) => {
         if (data.data) setCustomers(data.data);

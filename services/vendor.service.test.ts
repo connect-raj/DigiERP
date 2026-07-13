@@ -37,15 +37,18 @@ describe('VendorService', () => {
   });
 
   describe('getAll', () => {
-    it('should return all vendors', async () => {
-      vi.spyOn(vendorRepository, 'findAll').mockResolvedValue([mockVendor as never]);
+    it('should return all vendors with total count', async () => {
+      vi.spyOn(vendorRepository, 'findAll').mockResolvedValue({
+        data: [mockVendor as never],
+        total: 1,
+      });
       const result = await vendorService.getAll({});
       expect(vendorRepository.findAll).toHaveBeenCalledWith({});
-      expect(result).toHaveLength(1);
+      expect(result).toEqual({ data: [mockVendor], total: 1 });
     });
 
     it('should pass filter params to repository', async () => {
-      vi.spyOn(vendorRepository, 'findAll').mockResolvedValue([]);
+      vi.spyOn(vendorRepository, 'findAll').mockResolvedValue({ data: [], total: 0 });
       await vendorService.getAll({ isActive: true, search: 'test' });
       expect(vendorRepository.findAll).toHaveBeenCalledWith({ isActive: true, search: 'test' });
     });

@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_LIMIT = 5;
 
 type Customer = {
   id: string;
@@ -39,11 +42,14 @@ export default function DispatchEntriesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
   // Fetch customers for filters
   const fetchCustomers = async () => {
     try {
-      const res = await fetch('/api/customers');
+      // Filter dropdown needs the full list, not a paginated page.
+      const res = await fetch('/api/customers?limit=1000');
       const data = await res.json();
       if (data.data) {
         setCustomers(data.data);
@@ -64,11 +70,17 @@ export default function DispatchEntriesPage() {
       url.searchParams.append('isCancelled', showCancelled.toString());
       if (fromDate) url.searchParams.append('from', new Date(fromDate).toISOString());
       if (toDate) url.searchParams.append('to', new Date(toDate).toISOString());
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
 
       const res = await fetch(url.toString());
       const data = await res.json();
       if (data.data) {
         setEntries(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
       }
     } catch (error) {
       console.error('Failed to fetch dispatch entries', error);
@@ -83,9 +95,14 @@ export default function DispatchEntriesPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-    fetchDispatchEntries();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
   }, [search, statusFilter, customerFilter, showCancelled, fromDate, toDate]);
+
+  useEffect(() => {
+    // eslint-disable-next-line
+    fetchDispatchEntries();
+  }, [search, statusFilter, customerFilter, showCancelled, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Indian format helper for currency
   const formatINR = (val: string | number) => {
@@ -98,7 +115,7 @@ export default function DispatchEntriesPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       {/* Header Area */}
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
@@ -258,7 +275,7 @@ export default function DispatchEntriesPage() {
                     </div>
                   </td>
                 </tr>
-              ) : entries.length === 0 ? (
+              ) : pagination.total === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-on-surface-variant p-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-4 py-8">
@@ -336,6 +353,15 @@ export default function DispatchEntriesPage() {
             </tbody>
           </table>
         </div>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
+        )}
       </div>
     </div>
   );

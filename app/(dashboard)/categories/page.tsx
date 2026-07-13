@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_LIMIT = 5;
 
 type Category = {
   id: string;
@@ -18,6 +21,10 @@ export default function CategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [summary, setSummary] = useState({ total: 0, avgGstRate: 0 });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -29,10 +36,23 @@ export default function CategoriesPage() {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/categories');
+      const url = new URL('/api/categories', window.location.origin);
+      if (search) url.searchParams.append('search', search);
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
+
+      const res = await fetch(url.toString());
       const data = await res.json();
       if (data.data) {
         setCategories(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
+        setSummary({
+          total: data.summary?.total ?? 0,
+          avgGstRate: data.summary?.avgGstRate ?? 0,
+        });
       }
     } catch (error) {
       console.error('Failed to fetch categories', error);
@@ -123,12 +143,17 @@ export default function CategoriesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
     // eslint-disable-next-line
     fetchCategories();
-  }, []);
+  }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex h-full flex-col gap-8">
+    <div className="flex min-h-full flex-col gap-8">
       {/* Header Section */}
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
@@ -152,23 +177,32 @@ export default function CategoriesPage() {
           <p className="font-label-caps text-label-caps text-on-surface-variant uppercase">
             Total Categories
           </p>
-          <p className="font-display text-display text-primary mt-2">{categories.length}</p>
+          <p className="font-display text-display text-primary mt-2">{summary.total}</p>
         </div>
         <div className="rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-5">
           <p className="font-label-caps text-label-caps text-on-surface-variant uppercase">
             Avg. GST Rate
           </p>
           <p className="font-display text-display text-secondary mt-2">
-            {categories.length > 0
-              ? (categories.reduce((acc, c) => acc + c.gstRate, 0) / categories.length).toFixed(1)
-              : '0'}
-            %
+            {summary.avgGstRate.toFixed(1)}%
           </p>
         </div>
       </div>
 
+      {/* Search */}
+      <div className="flex h-[52px] items-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 transition-colors focus-within:border-[#555] md:w-1/2">
+        <span className="material-symbols-outlined px-3 text-[#8e9192]">search</span>
+        <input
+          className="text-on-surface font-body-md h-full w-full border-none bg-transparent p-0 text-[13px] placeholder:text-[#8e9192] focus:ring-0"
+          placeholder="Search categories by name or HSN code..."
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       {/* Categories Table */}
-      <div className="overflow-hidden rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c]">
+      <div className="flex flex-col overflow-hidden rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c]">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b-[0.5px] border-[#333] bg-[#222]">
@@ -196,7 +230,7 @@ export default function CategoriesPage() {
                   Loading categories...
                 </td>
               </tr>
-            ) : categories.length === 0 ? (
+            ) : pagination.total === 0 ? (
               <tr>
                 <td colSpan={5} className="text-on-surface-variant px-6 py-8 text-center">
                   No categories found.
@@ -240,6 +274,15 @@ export default function CategoriesPage() {
             )}
           </tbody>
         </table>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
+        )}
       </div>
 
       {/* Add Category Modal (Simplified) */}

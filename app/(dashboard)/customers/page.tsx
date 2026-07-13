@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import CustomerFormDrawer, { Customer } from './_components/CustomerFormDrawer';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_LIMIT = 5;
 
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {
@@ -17,6 +20,8 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -26,9 +31,17 @@ export default function CustomersPage() {
       setLoading(true);
       const url = new URL('/api/customers', window.location.origin);
       if (search) url.searchParams.append('search', search);
+      url.searchParams.append('page', String(page));
+      url.searchParams.append('limit', String(PAGE_LIMIT));
       const res = await fetch(url.toString());
       const data = await res.json();
-      if (data.data) setCustomers(data.data);
+      if (data.data) {
+        setCustomers(data.data);
+        setPagination({
+          total: data.pagination?.total ?? 0,
+          totalPages: data.pagination?.totalPages ?? 1,
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch customers', error);
     } finally {
@@ -37,9 +50,14 @@ export default function CustomersPage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-    fetchCustomers();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
   }, [search]);
+
+  useEffect(() => {
+    // eslint-disable-next-line
+    fetchCustomers();
+  }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCreateDrawer = () => {
     setEditingCustomer(null);
@@ -58,7 +76,7 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div className="flex items-center gap-4">
           <h1 className="font-headline-md text-headline-md text-primary">Customers</h1>
@@ -125,7 +143,7 @@ export default function CustomersPage() {
                     ))}
                   </tr>
                 ))
-              ) : customers.length === 0 ? (
+              ) : pagination.total === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-12 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -202,6 +220,15 @@ export default function CustomersPage() {
             </tbody>
           </table>
         </div>
+        {!loading && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={PAGE_LIMIT}
+            onPageChange={setPage}
+          />
+        )}
       </div>
 
       <CustomerFormDrawer

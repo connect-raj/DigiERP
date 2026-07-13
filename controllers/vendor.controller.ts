@@ -5,7 +5,8 @@ import {
   updateVendorSchema,
   linkVendorProductsSchema,
 } from '@/validations/vendor';
-import { successResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { parsePagination } from '@/lib/pagination';
 
 export class VendorController {
   async getAll(req: NextRequest) {
@@ -16,8 +17,9 @@ export class VendorController {
     const isActive =
       isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : undefined;
 
-    const vendors = await vendorService.getAll({ isActive, search });
-    return successResponse(vendors);
+    const { page, limit, skip, take } = parsePagination(searchParams);
+    const { data, total } = await vendorService.getAll({ isActive, search, skip, take });
+    return paginatedResponse(data, { page, limit, total });
   }
 
   async getById(_req: NextRequest, id: string) {

@@ -52,3 +52,22 @@ export class ConflictError extends AppError {
 export function successResponse<T>(data: T, status = 200): NextResponse {
   return NextResponse.json({ success: true, data }, { status });
 }
+
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export function paginatedResponse<T>(
+  data: T,
+  { page, limit, total }: PaginationMeta,
+  extra?: Record<string, unknown>
+): NextResponse {
+  return NextResponse.json({
+    success: true,
+    data,
+    pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    ...extra,
+  });
+}
