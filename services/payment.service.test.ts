@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { paymentService } from './payment.service';
 import { paymentRepository } from '@/repositories/payment.repository';
+import { userRepository } from '@/repositories/user.repository';
 import { NotFoundError } from '@/lib/errors';
 import { CreatePaymentInput, AllocatePaymentsInput } from '@/validations/payment';
 
@@ -18,10 +19,17 @@ vi.mock('@/repositories/payment.repository', () => ({
   },
 }));
 
+vi.mock('@/repositories/user.repository', () => ({
+  userRepository: {
+    findById: vi.fn(),
+  },
+}));
+
 describe('PaymentService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.mocked(userRepository.findById).mockResolvedValue({ id: 'user-1' } as never);
   });
 
   describe('getSummary', () => {
@@ -105,6 +113,7 @@ describe('PaymentService', () => {
       };
       await paymentService.create(input, 'user-1');
 
+      expect(userRepository.findById).toHaveBeenCalledWith('user-1');
       expect(paymentRepository.createPaymentTx).toHaveBeenCalledWith(
         expect.objectContaining({
           customerId: 'cust-1',
@@ -112,6 +121,32 @@ describe('PaymentService', () => {
           mode: 'BANK_TRANSFER',
           reference: 'REF-1',
           recordedById: 'user-1',
+        })
+      );
+    });
+
+    it('sets recordedById to undefined if the user does not exist in the database', async () => {
+      vi.mocked(paymentRepository.findCustomerById).mockResolvedValue({ id: 'cust-1' } as never);
+      vi.mocked(paymentRepository.createPaymentTx).mockResolvedValue({ id: 'pay-1' } as never);
+      vi.mocked(userRepository.findById).mockResolvedValue(null);
+
+      const input: CreatePaymentInput = {
+        customerId: 'cust-1',
+        amount: 500,
+        mode: 'BANK_TRANSFER',
+        date: '2026-07-01T00:00:00.000Z',
+        reference: 'REF-1',
+      };
+      await paymentService.create(input, 'missing-user');
+
+      expect(userRepository.findById).toHaveBeenCalledWith('missing-user');
+      expect(paymentRepository.createPaymentTx).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          amount: 500,
+          mode: 'BANK_TRANSFER',
+          reference: 'REF-1',
+          recordedById: undefined,
         })
       );
     });

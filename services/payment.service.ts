@@ -1,5 +1,6 @@
 import { PaymentMode } from '@prisma/client';
 import { paymentRepository, PaymentFilters } from '@/repositories/payment.repository';
+import { userRepository } from '@/repositories/user.repository';
 import { NotFoundError } from '@/lib/errors';
 import { CreatePaymentInput, AllocatePaymentsInput } from '@/validations/payment';
 
@@ -57,13 +58,21 @@ export class PaymentService {
       throw new NotFoundError(`Customer with id '${data.customerId}' not found`);
     }
 
+    let finalRecordedById: string | undefined = recordedById;
+    if (recordedById) {
+      const userExists = await userRepository.findById(recordedById);
+      if (!userExists) {
+        finalRecordedById = undefined;
+      }
+    }
+
     return paymentRepository.createPaymentTx({
       customerId: data.customerId,
       amount: data.amount,
       mode: data.mode as PaymentMode,
       date: new Date(data.date),
       reference: data.reference,
-      recordedById,
+      recordedById: finalRecordedById,
     });
   }
 
