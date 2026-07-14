@@ -21,10 +21,12 @@ vi.mock('@/lib/prisma', () => ({
     },
     customerPrice: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       upsert: vi.fn(),
     },
     priceHistory: {
       create: vi.fn(),
+      createMany: vi.fn(),
     },
     settings: {
       findFirst: vi.fn(),
@@ -91,6 +93,8 @@ describe('InvoiceRepository', () => {
     );
     vi.mocked(prisma.invoice.create).mockResolvedValue({ id: 'inv-1', items: [] } as never);
     vi.mocked(prisma.customerPrice.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.customerPrice.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.priceHistory.createMany).mockResolvedValue({ count: 1 } as never);
   });
 
   describe('findAll', () => {
@@ -132,8 +136,16 @@ describe('InvoiceRepository', () => {
   });
 
   describe('createInvoiceTx', () => {
+    it('uses a transaction with 15s timeout', async () => {
+      await invoiceRepository.createInvoiceTx(baseCreateData);
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        maxWait: 10000,
+        timeout: 15000,
+      });
+    });
+
     it('auto-upserts CustomerPrice and logs PriceHistory when no manual price exists', async () => {
-      vi.mocked(prisma.customerPrice.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.customerPrice.findMany).mockResolvedValue([]);
 
       await invoiceRepository.createInvoiceTx(baseCreateData);
 
@@ -144,35 +156,42 @@ describe('InvoiceRepository', () => {
           update: expect.objectContaining({ price: 100, isManual: false }),
         })
       );
-      expect(prisma.priceHistory.create).toHaveBeenCalledWith({
-        data: {
-          customerId: 'cust-1',
-          productId: 'prod-1',
-          price: 100,
-          source: 'AUTO_INVOICE',
-        },
+      expect(prisma.priceHistory.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            customerId: 'cust-1',
+            productId: 'prod-1',
+            price: 100,
+            source: 'AUTO_INVOICE',
+          },
+        ],
       });
     });
 
     it('skips the CustomerPrice upsert but still logs PriceHistory when the price is manually set', async () => {
-      vi.mocked(prisma.customerPrice.findUnique).mockResolvedValue({
-        id: 'cp-1',
-        customerId: 'cust-1',
-        productId: 'prod-1',
-        price: 150,
-        isManual: true,
-      } as never);
+      vi.mocked(prisma.customerPrice.findMany).mockResolvedValue([
+        {
+          id: 'cp-1',
+          customerId: 'cust-1',
+          productId: 'prod-1',
+          price: 150,
+          isManual: true,
+          updatedAt: new Date(),
+        } as never,
+      ]);
 
       await invoiceRepository.createInvoiceTx(baseCreateData);
 
       expect(prisma.customerPrice.upsert).not.toHaveBeenCalled();
-      expect(prisma.priceHistory.create).toHaveBeenCalledWith({
-        data: {
-          customerId: 'cust-1',
-          productId: 'prod-1',
-          price: 100,
-          source: 'AUTO_INVOICE',
-        },
+      expect(prisma.priceHistory.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            customerId: 'cust-1',
+            productId: 'prod-1',
+            price: 100,
+            source: 'AUTO_INVOICE',
+          },
+        ],
       });
     });
 

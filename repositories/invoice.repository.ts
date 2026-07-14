@@ -137,128 +137,143 @@ export class InvoiceRepository {
   }
 
   async createInvoiceTx(data: CreateInvoiceData) {
-    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const invoiceNo = await generateInvoiceNo(tx, data.date);
+    return prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const invoiceNo = await generateInvoiceNo(tx, data.date);
 
-      const snapshot: InvoiceSnapshot = {
-        company: data.company,
-        customer: data.customerSnapshot,
-        invoice: {
-          invoiceNo,
-          date: data.date.toISOString(),
-          place: data.place,
-          transport: data.transport ?? null,
-        },
-        dispatchReference: {
-          challanNo: data.dispatchReference.challanNo,
-          dispatchDate: data.dispatchReference.dispatchDate.toISOString(),
-        },
-        items: data.items.map((item) => ({
-          productName: item.productName,
-          categoryName: item.categoryName,
-          hsnCode: item.hsnCode,
-          quantity: item.quantity,
-          unit: item.unit,
-          price: item.price,
-          cgst: item.cgst,
-          sgst: item.sgst,
-          igst: item.igst,
-          lineTotal: item.lineTotal,
-        })),
-        totals: {
-          totalAmount: data.totalAmount,
-          totalCgst: data.totalCgst,
-          totalSgst: data.totalSgst,
-          totalIgst: data.totalIgst,
-        },
-      };
-
-      let invoice;
-      try {
-        invoice = await tx.invoice.create({
-          data: {
+        const snapshot: InvoiceSnapshot = {
+          company: data.company,
+          customer: data.customerSnapshot,
+          invoice: {
             invoiceNo,
-            dispatchEntryId: data.dispatchEntryId,
-            customerId: data.customerId,
-            date: data.date,
+            date: data.date.toISOString(),
             place: data.place,
-            transport: data.transport,
+            transport: data.transport ?? null,
+          },
+          dispatchReference: {
+            challanNo: data.dispatchReference.challanNo,
+            dispatchDate: data.dispatchReference.dispatchDate.toISOString(),
+          },
+          items: data.items.map((item) => ({
+            productName: item.productName,
+            categoryName: item.categoryName,
+            hsnCode: item.hsnCode,
+            quantity: item.quantity,
+            unit: item.unit,
+            price: item.price,
+            cgst: item.cgst,
+            sgst: item.sgst,
+            igst: item.igst,
+            lineTotal: item.lineTotal,
+          })),
+          totals: {
             totalAmount: data.totalAmount,
             totalCgst: data.totalCgst,
             totalSgst: data.totalSgst,
             totalIgst: data.totalIgst,
-            snapshot: snapshot as unknown as Prisma.InputJsonValue,
-            items: {
-              create: data.items.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-                cgst: item.cgst,
-                sgst: item.sgst,
-                igst: item.igst,
-                lineTotal: item.lineTotal,
-              })),
-            },
           },
-          include: { items: true },
-        });
-      } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          throw new BadRequestError(
-            'This dispatch entry has already been invoiced',
-            'DISPATCH_ENTRY_ALREADY_BILLED'
-          );
+        };
+
+        let invoice;
+        try {
+          invoice = await tx.invoice.create({
+            data: {
+              invoiceNo,
+              dispatchEntryId: data.dispatchEntryId,
+              customerId: data.customerId,
+              date: data.date,
+              place: data.place,
+              transport: data.transport,
+              totalAmount: data.totalAmount,
+              totalCgst: data.totalCgst,
+              totalSgst: data.totalSgst,
+              totalIgst: data.totalIgst,
+              snapshot: snapshot as unknown as Prisma.InputJsonValue,
+              items: {
+                create: data.items.map((item) => ({
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  price: item.price,
+                  cgst: item.cgst,
+                  sgst: item.sgst,
+                  igst: item.igst,
+                  lineTotal: item.lineTotal,
+                })),
+              },
+            },
+            include: { items: true },
+          });
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            throw new BadRequestError(
+              'This dispatch entry has already been invoiced',
+              'DISPATCH_ENTRY_ALREADY_BILLED'
+            );
+          }
+          throw error;
         }
-        throw error;
-      }
 
-      await tx.dispatchEntry.update({
-        where: { id: data.dispatchEntryId },
-        data: { status: 'BILLED' },
-      });
-
-      await tx.customer.update({
-        where: { id: data.customerId },
-        data: { outstandingBalance: { increment: data.totalAmount } },
-      });
-
-      const uniqueProductIds = [...new Set(data.items.map((item) => item.productId))];
-      const priceByProduct = new Map(data.items.map((item) => [item.productId, item.price]));
-
-      for (const productId of uniqueProductIds) {
-        const price = priceByProduct.get(productId)!;
-        const existing = await tx.customerPrice.findUnique({
-          where: { customerId_productId: { customerId: data.customerId, productId } },
+        await tx.dispatchEntry.update({
+          where: { id: data.dispatchEntryId },
+          data: { status: 'BILLED' },
         });
 
-        if (!existing || !existing.isManual) {
-          await tx.customerPrice.upsert({
-            where: { customerId_productId: { customerId: data.customerId, productId } },
-            create: {
+        await tx.customer.update({
+          where: { id: data.customerId },
+          data: { outstandingBalance: { increment: data.totalAmount } },
+        });
+
+        const uniqueProductIds = [...new Set(data.items.map((item) => item.productId))];
+        const priceByProduct = new Map(data.items.map((item) => [item.productId, item.price]));
+
+        const existingPrices = await tx.customerPrice.findMany({
+          where: {
+            customerId: data.customerId,
+            productId: { in: uniqueProductIds },
+          },
+        });
+
+        const existingPricesMap = new Map(existingPrices.map((ep) => [ep.productId, ep]));
+
+        for (const productId of uniqueProductIds) {
+          const price = priceByProduct.get(productId)!;
+          const existing = existingPricesMap.get(productId);
+
+          if (!existing || !existing.isManual) {
+            await tx.customerPrice.upsert({
+              where: { customerId_productId: { customerId: data.customerId, productId } },
+              create: {
+                customerId: data.customerId,
+                productId,
+                price,
+                isManual: false,
+              },
+              update: {
+                price,
+                isManual: false,
+              },
+            });
+          }
+        }
+
+        if (uniqueProductIds.length > 0) {
+          await tx.priceHistory.createMany({
+            data: uniqueProductIds.map((productId) => ({
               customerId: data.customerId,
               productId,
-              price,
-              isManual: false,
-            },
-            update: {
-              price,
-              isManual: false,
-            },
+              price: priceByProduct.get(productId)!,
+              source: 'AUTO_INVOICE',
+            })),
           });
         }
 
-        await tx.priceHistory.create({
-          data: {
-            customerId: data.customerId,
-            productId,
-            price,
-            source: 'AUTO_INVOICE',
-          },
-        });
+        return invoice;
+      },
+      {
+        maxWait: 10000,
+        timeout: 15000,
       }
-
-      return invoice;
-    });
+    );
   }
 }
 
