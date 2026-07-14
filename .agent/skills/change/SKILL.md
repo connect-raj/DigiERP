@@ -96,18 +96,39 @@ Present a concise plan covering:
 6. **Open questions** — anything ambiguous in the description or images that
    needs clarification before work starts.
 
-Present this plan to the user and **stop**. Do not modify any files yet.
+Do not present this plan to the user yet — first run the critique in Step 5.
 
-### Step 5 — Wait for approval (hard gate)
-Do not proceed to Step 6 until the user explicitly approves the plan
-(e.g. "approved", "go ahead", "lgtm") or provides revisions.
+### Step 5 — Plan critique (devil's advocate)
+Before the plan reaches the user, run a **plan critique** against the
+criteria in `critique-criteria.md` (plan mode: 10 dimensions, ~22 criteria —
+Completeness, Correctness, Testability, Security, Consistency, Simplicity,
+Dependencies, Resilience, Integration, Architecture).
 
-- If revisions are given → update the plan and re-present it for approval.
+- Load project standards first (`CLAUDE.md`/`AGENTS.md`, ADR files, existing
+  patterns) as described in `critique-criteria.md`.
+- Dispatch to an **independent subagent** per the independence gate — it
+  receives only the plan document and codebase, not the planning agent's
+  reasoning for its choices. This matters especially for `no-overengineering`
+  and `no-reinventing-solved-problems`, which are easy to rationalize as the
+  original author but easier to catch from the outside.
+- Every FAIL needs a specific reference (file/section) and a concrete fix.
+- Resolve every FAIL per the resolution rule (fixed or rebutted, never
+  silent), then re-check only the previously-failing criteria.
+- Attach the critique verdict and any resolved/rebutted flags to the plan
+  when presenting it to the user.
+
+### Step 6 — Present plan and wait for approval (hard gate)
+Present the plan together with the plan critique's verdict. Do not proceed
+to Step 7 until the user explicitly approves the plan (e.g. "approved", "go
+ahead", "lgtm") or provides revisions.
+
+- If revisions are given → update the plan, re-run the critique on the
+  changed sections, and re-present for approval.
 - If the user asks a question → answer it, then re-present the updated plan.
 - Do not interpret silence or an unrelated message as approval.
 - Never skip or soft-skip this gate regardless of how simple the change seems.
 
-### Step 6 — Implement the change
+### Step 7 — Implement the change
 Once approved, apply the changes per the approved plan:
 - Modify only the files listed in the plan. If an unplanned file needs
   changing, pause and flag it to the user rather than silently changing it.
@@ -118,102 +139,46 @@ Once approved, apply the changes per the approved plan:
   (production secrets, connection strings) inline — comment with a `TODO: set
   in environment` note instead.
 
-### Step 7 — Update or add tests (if applicable)
+### Step 8 — Update or add tests (if applicable)
 Per the test impact noted in the plan:
 - Update any existing tests broken by the change.
 - Add new tests if the plan called for them.
 - If no test changes were planned, skip this step and note it in the summary.
 
-### Step 8 — Judge agent (code quality review)
-Before running any tooling, a dedicated **judge-agent** performs a critical
-internal review of every file touched in Steps 6 and 7. Its job is to
-interrogate the implementation the way a senior engineer would in a code
-review — not to rubber-stamp it.
+### Step 9 — Code critique (devil's advocate)
+Before running any tooling, run a **code critique** against the criteria in
+`critique-criteria.md` (code mode: 8 dimensions, ~20 criteria — Correctness,
+Security, Quality, Performance, Consistency, Integration, Architecture)
+covering every file touched in Steps 7–8.
 
-#### What the judge-agent must challenge
+- Dispatch to an **independent subagent** per the independence gate — it
+  reviews the diff and codebase only, never the implementer's own reasoning
+  or justification for its choices. This matters most for `no-code-smell`
+  and `boundaries-respected` / `no-hacky-shortcuts`, which are easy to
+  wave away as the original author but obvious from the outside.
+- Every FAIL needs `file:line` evidence and a concrete `Fix:` suggestion —
+  no hand-waving.
+- Pay particular attention, given this command's change types, to:
+  - *Bug fix* → `edge-cases`, `no-regressions` (did the fix introduce a new
+    bug while closing the old one?).
+  - *Refactor* → `no-hacky-shortcuts`, `boundaries-respected` (did the
+    refactor preserve behavior and respect existing architecture, or did it
+    quietly change something while "just cleaning up"?).
+  - *UI tweak* → `no-code-smell`, `patterns-followed` (are new styles
+    hardcoded values instead of using existing design tokens/theme?).
+  - *Config/infra* → `no-secrets`, `input-validated` (no credentials or
+    environment-specific values committed inline).
+- Resolve every FAIL per the resolution rule in `critique-criteria.md`
+  (fixed or rebutted, never silent). Re-check only the previously-failing
+  criteria after fixes are applied.
+- The critique agent cannot change behavior itself — a fix that would alter
+  observable behavior beyond the approved plan gets escalated to the user
+  rather than applied silently.
+- Log the run (timestamp, git SHA, pass/fail counts) per the logging
+  convention in `critique-criteria.md`, if the repo has a place for it.
+- Only proceed to Step 10 once the verdict is `READY TO SHIP`.
 
-For every meaningful block of new or changed code, the judge-agent asks itself
-the following questions and must produce a written answer for each:
-
-1. **Necessity** — *"Why does this code need to exist?"*
-   - Is this block solving the stated problem, or is it solving a problem that
-     wasn't asked for?
-   - Is there existing code elsewhere in the repo that already does this and
-     could be reused or extended instead?
-   - If removed, would any behaviour the user cares about break? If not, flag
-     it as unnecessary.
-
-2. **Simplicity** — *"Can this be written more simply?"*
-   - Is the logic expressed in the fewest meaningful steps?
-   - Are there intermediate variables, helper functions, or abstractions that
-     exist solely to wrap a single line? If so, are they earning their keep?
-   - Could a standard library function, a built-in language feature, or an
-     already-imported utility replace a hand-rolled implementation?
-
-3. **Readability** — *"Will the next developer understand this in 30 seconds?"*
-   - Are names (variables, functions, components, config keys) self-describing
-     without needing a comment to explain them?
-   - Are comments present where logic is non-obvious, and absent where the code
-     is already clear?
-   - Is the control flow (conditionals, loops, async chains) as flat and linear
-     as the problem allows?
-
-4. **Consistency** — *"Does this match how the rest of the codebase is written?"*
-   - Does it follow the naming conventions, patterns, and abstractions already
-     used in the surrounding files?
-   - If it introduces a new pattern, is there a clear reason why the existing
-     pattern couldn't be used?
-
-#### Judge-agent output format
-The judge-agent produces a structured report:
-
-```
-JUDGE REPORT
-============
-Files reviewed: <list>
-
-[PASS] <file>:<line-range> — <one-line reason it is fine>
-[SUGGESTION] <file>:<line-range>
-  Issue: <what triggered the flag>
-  Question: <the specific "why" or "can this be simpler" question>
-  Suggestion: <concrete alternative or direction>
-[SIMPLIFY] <file>:<line-range>
-  Current: <brief description of current approach>
-  Simpler: <concrete simpler alternative>
-[REMOVE] <file>:<line-range>
-  Reason: <why this code appears unnecessary>
-  Risk if removed: <none / low / medium — with explanation>
-```
-
-Use `[PASS]` when a block is clean and needs no comment.
-Use `[SUGGESTION]` for readability or consistency issues.
-Use `[SIMPLIFY]` when a block can be meaningfully reduced.
-Use `[REMOVE]` when code appears unnecessary entirely.
-
-#### What happens after the judge report
-
-- If the report contains **only** `[PASS]` entries → proceed directly to
-  Step 9 (validation pipeline). Note "Judge: all clear" in the final summary.
-
-- If the report contains any `[SUGGESTION]`, `[SIMPLIFY]`, or `[REMOVE]`
-  entries → the implementing agent must address each one:
-  - For each flag: either apply the suggested improvement, or write a one-line
-    rebuttal explaining why the current implementation is correct as-is.
-  - Rebuttals are valid — the judge is not always right. But every flag must
-    get a conscious response, not silence.
-  - After addressing all flags, the judge-agent re-reviews only the flagged
-    sections and confirms each is either resolved or rebutted.
-  - The judge does not re-review `[PASS]` sections on the second pass.
-
-- The judge-agent does **not** have authority to change the behaviour of the
-  implementation. It can only flag quality issues. If a suggested simplification
-  would alter observable behaviour, it must be marked as such and deferred to
-  the user.
-
-- The judge-agent's report and the resolution of each flag are included in the
-  final summary in Step 10.
-
-### Step 9 — Validation pipeline (via subagents)
+### Step 10 — Validation pipeline (via subagents)
 Run the following four checks **in order**, each delegated to its own
 subagent. Each subagent owns a fix-and-retry loop: it runs its command,
 diagnoses any failure, applies a fix, and re-runs until the command passes
@@ -238,15 +203,15 @@ Rules for each subagent:
 - Each subagent reports back: command run, exit code, what was fixed (if
   anything).
 
-### Step 10 — Completion & commit prompt
+### Step 11 — Completion & commit prompt
 Once all applicable validation steps pass:
 
 1. Print a summary:
    - Branch worked on.
    - Change type(s) applied.
    - Files modified (with a one-liner per file on what changed).
-   - Judge report outcome: "all clear" or a list of flags raised, how each
-     was resolved (applied / rebutted), and any rebuttals given.
+   - Plan critique verdict (Step 5) and code critique verdict (Step 9), with
+     any resolved/rebutted flags from either.
    - Validation results (pass / skipped, and any fixes applied by subagents).
 
 2. Ask the user:
@@ -262,19 +227,28 @@ Once all applicable validation steps pass:
 ---
 
 ## Notes for the agent runtime
-- The judge-agent in Step 8 is a self-critique pass, not a user-facing gate.
-  It runs entirely within the agent loop. The user only sees the judge report
-  summary in Step 10 — they are not asked to approve it.
-- The judge-agent must never modify behaviour — only flag quality. Any
-  suggestion that would change observable output must be escalated to the user.
+- Steps 5 and 9 (plan critique, code critique) reference `critique-criteria.md`
+  for the actual criteria, scoring rules, and reporting format — keep that
+  file alongside this one.
+- The critique passes in Steps 5 and 9 are self-critique, not user-facing
+  gates — they run entirely within the agent loop. The user sees the verdict
+  and any resolved/rebutted flags in the plan presentation (Step 6) and the
+  final summary (Step 11); they are not asked to separately approve the
+  critique itself.
+- Neither critique pass may change behavior — only flag quality/risk issues.
+  Any suggestion that would alter observable output must be escalated to the
+  user rather than applied silently.
 - This command assumes access to a shell/git tool and the ability to spawn or
-  simulate subagents for Step 8. If the runtime has no subagent concept,
-  execute Step 8's table sequentially in the main agent context instead,
-  preserving the same fix-and-retry behaviour per command.
+  simulate independent subagents for Steps 5, 9, and 10. If the runtime has
+  no subagent concept, run the critique in the main agent context but
+  explicitly re-read the artifact fresh, without relying on prior reasoning
+  in context, to approximate the independence gate; execute Step 10's table
+  sequentially in the main agent context, preserving the same fix-and-retry
+  behavior per command.
 - Never create a branch. Branch selection is always delegated to the user in
   Step 2.
 - Images attached at invocation must be processed in Step 3 before the plan
   is written. If the runtime does not support image input, tell the user at
   invocation time and ask them to describe the image content in text instead.
-- The hard gate in Step 5 applies to all change types — including single-line
+- The hard gate in Step 6 applies to all change types — including single-line
   config changes. The plan review is not optional.
