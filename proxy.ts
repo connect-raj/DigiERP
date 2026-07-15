@@ -7,9 +7,12 @@ import { rateLimit, clientKeyFromHeaders } from '@/lib/rate-limit';
  * Global request Proxy (Next.js 16 — formerly `middleware`). Runs on the Node.js
  * runtime, so it can use the Node `crypto`-based `verifyToken` directly.
  *
- * Enforces authentication and basic rate limiting on every business API route.
- * `/api/auth/*` (login/register/logout) is excluded via the matcher and an
- * in-function guard so credentials can be exchanged before a session exists.
+ * Enforces authentication on every page and business API route, plus basic rate
+ * limiting on API calls. `/api/auth/*` (login/register/logout) is excluded via
+ * the matcher and an in-function guard so credentials can be exchanged before a
+ * session exists. Unauthenticated page requests are redirected to `/login`
+ * (an "optimistic" UI-level check per Next's proxy guidance); the API layer
+ * remains the authoritative data-access gate.
  */
 
 function jsonError(code: string, message: string, status: number, headers?: HeadersInit) {
@@ -18,35 +21,55 @@ function jsonError(code: string, message: string, status: number, headers?: Head
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith('/api/');
 
   // Auth endpoints stay public even if the matcher ever widens.
   if (pathname.startsWith('/api/auth/')) {
     return NextResponse.next();
   }
 
-  // Rate limiting, keyed by client IP.
-  const rl = rateLimit(clientKeyFromHeaders(request.headers));
-  if (!rl.allowed) {
-    const retryAfter = Math.max(0, Math.ceil((rl.resetAt - Date.now()) / 1000));
-    return jsonError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, {
-      'Retry-After': String(retryAfter),
-    });
+  // Rate limiting applies to API calls only — page navigations shouldn't
+  // consume the same budget.
+  if (isApi) {
+    const rl = rateLimit(clientKeyFromHeaders(request.headers));
+    if (!rl.allowed) {
+      const retryAfter = Math.max(0, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      return jsonError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, {
+        'Retry-After': String(retryAfter),
+      });
+    }
   }
 
-  // Authentication.
   const token = request.cookies.get('session-token')?.value;
-  if (!token) {
-    return jsonError('UNAUTHORIZED', 'Unauthorized: No session token found', 401);
+  const isAuthed = token != null && verifyToken(token) !== null;
+
+  if (pathname === '/login') {
+    return isAuthed ? NextResponse.redirect(new URL('/', request.url)) : NextResponse.next();
   }
-  if (!verifyToken(token)) {
-    return jsonError('UNAUTHORIZED', 'Unauthorized: Invalid or expired token', 401);
+
+  if (!isAuthed) {
+    if (isApi) {
+      const message =
+        token == null
+          ? 'Unauthorized: No session token found'
+          : 'Unauthorized: Invalid or expired token';
+      return jsonError('UNAUTHORIZED', message, 401);
+    }
+    const loginUrl = new URL('/login', request.url);
+    const target = pathname + request.nextUrl.search;
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('from', target);
+    }
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  // Every /api route except the public auth endpoints (negative lookahead — a
-  // positive `/api/:path*` cannot subtract a subpath).
-  matcher: '/api/((?!auth/).*)',
+  // Every route except the public auth API, Next internals, and static assets
+  // (negative lookahead — a positive catch-all can't subtract these subpaths).
+  matcher: [
+    '/((?!api/auth|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|css|js)$).*)',
+  ],
 };

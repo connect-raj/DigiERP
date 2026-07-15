@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ShaderBackground from '@/components/ShaderBackground';
+import { sanitizeReturnTo } from '@/lib/safe-redirect';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -80,8 +81,10 @@ export default function LoginPage() {
         setHandshakeMessage(null);
       } else {
         setHandshakeMessage('Handshake established. Authorizing administrative node...');
+        const from = new URLSearchParams(window.location.search).get('from');
+        const destination = sanitizeReturnTo(from, window.location.origin);
         setTimeout(() => {
-          router.push('/');
+          router.push(destination);
         }, 1500);
       }
     } catch {
