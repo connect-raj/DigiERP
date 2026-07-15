@@ -157,13 +157,19 @@ export default function Sidebar() {
       </div>
 
       <div className="mt-8 mt-auto flex w-full flex-col space-y-1 border-t-[0.5px] border-[#333] px-5 pt-8">
-        <div
-          className="text-on-surface-variant hover:text-primary flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 hover:bg-[#252525]"
+        <Link
+          href="/settings"
           title="Settings"
+          className={`flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 transition-all duration-200 ${isRouteActive('/settings') ? 'text-primary border-[0.5px] border-[#444] bg-[#2a2a2a]' : 'text-on-surface-variant hover:text-primary hover:bg-[#252525]'}`}
         >
-          <span className="material-symbols-outlined text-[20px]">settings</span>
+          <span
+            className="material-symbols-outlined text-[20px]"
+            style={isRouteActive('/settings') ? { fontVariationSettings: "'FILL' 1" } : {}}
+          >
+            settings
+          </span>
           <span className="text-[13px] font-medium">Settings</span>
-        </div>
+        </Link>
         <button
           type="button"
           onClick={handleLogout}
