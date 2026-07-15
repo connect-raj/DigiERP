@@ -354,8 +354,8 @@ export default function NewDispatchEntryPage() {
                   {formatINR(creditWarning.outstandingAfter)}
                 </strong>{' '}
                 against a credit limit of{' '}
-                <strong className="text-primary">{formatINR(creditWarning.creditLimit)}</strong>. The
-                dispatch entry has been recorded.
+                <strong className="text-primary">{formatINR(creditWarning.creditLimit)}</strong>.
+                The dispatch entry has been recorded.
               </p>
             </div>
           </div>

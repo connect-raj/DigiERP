@@ -62,8 +62,9 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchVendor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -90,7 +91,9 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/vendors/${id}/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: [{ productId: linkProductId, isPreferred: linkPreferred }] }),
+        body: JSON.stringify({
+          products: [{ productId: linkProductId, isPreferred: linkPreferred }],
+        }),
       });
       const data = await res.json();
       if (!res.ok) {

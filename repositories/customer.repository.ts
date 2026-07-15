@@ -3,12 +3,7 @@ import { Prisma } from '@prisma/client';
 import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
 
 export class CustomerRepository {
-  async findAll(params: {
-    search?: string;
-    isActive?: boolean;
-    skip?: number;
-    take?: number;
-  }) {
+  async findAll(params: { search?: string; isActive?: boolean; skip?: number; take?: number }) {
     const { search, isActive, skip, take } = params;
     const where: Prisma.CustomerWhereInput = {
       ...(isActive !== undefined && { isActive }),

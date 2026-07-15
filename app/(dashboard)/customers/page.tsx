@@ -239,9 +239,7 @@ export default function CustomersPage() {
                           className="text-on-surface-variant hover:text-error hover:bg-surface-variant ml-1 rounded p-1.5 opacity-0 transition-all group-hover:opacity-100"
                           title="Deactivate"
                         >
-                          <span className="material-symbols-outlined text-[18px]">
-                            person_off
-                          </span>
+                          <span className="material-symbols-outlined text-[18px]">person_off</span>
                         </button>
                       </td>
                     </tr>
