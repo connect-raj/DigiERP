@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -21,7 +26,18 @@ export default function Sidebar() {
   };
 
   return (
-    <nav className="text-primary font-body-md text-body-md fixed top-0 left-0 z-50 flex h-full w-[260px] flex-col overflow-y-auto border-r-[0.5px] border-[#333] bg-[#1c1c1c] py-8">
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-45 bg-black/60 backdrop-blur-sm lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <nav
+        className={`text-primary font-body-md text-body-md fixed top-0 left-0 z-50 flex h-full w-[260px] flex-col overflow-y-auto border-r-[0.5px] border-[#333] bg-[#1c1c1c] py-8 transition-transform duration-300 ease-in-out lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+      >
       <div className="mb-10 flex items-center gap-4 px-8">
         <div className="bg-surface-container-high text-primary font-display flex h-11 w-11 items-center justify-center rounded-xl border-[0.5px] border-[#444] text-xl font-bold shadow-sm">
           DE
@@ -181,5 +197,6 @@ export default function Sidebar() {
         </button>
       </div>
     </nav>
+    </>
   );
 }
