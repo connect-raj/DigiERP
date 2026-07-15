@@ -70,6 +70,6 @@ export const config = {
   // Every route except the public auth API, Next internals, and static assets
   // (negative lookahead — a positive catch-all can't subtract these subpaths).
   matcher: [
-    '/((?!api/auth|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|css|js)$).*)',
+    '/((?!api/auth|_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|css|js)$).*)',
   ],
 };

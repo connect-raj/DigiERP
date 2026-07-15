@@ -1,5 +1,6 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist_Mono, Hanken_Grotesk } from 'next/font/google';
+import PWARegister from '@/components/PWARegister';
 import './globals.css';
 
 const geistMono = Geist_Mono({
@@ -14,7 +15,25 @@ const hankenGrotesk = Hanken_Grotesk({
 
 export const metadata: Metadata = {
   title: 'DigiERP',
-  description: 'Welcome to DigiERP!',
+  description: 'Enterprise Resource Planning system for business operations',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'DigiERP',
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-icon.png',
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#141313',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({
@@ -34,7 +53,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <PWARegister />
+        {children}
+      </body>
     </html>
   );
 }
