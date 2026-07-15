@@ -53,12 +53,15 @@ export default function NewDispatchEntryPage() {
   // Customer Prices mapping
   const [customerPrices, setCustomerPrices] = useState<Record<string, number>>({});
 
-  // Credit Limit Warning State
+  // Credit Limit Warning State — populated from the server's non-blocking
+  // `warning` object returned by the dispatch-create endpoint (single source of
+  // truth), not recomputed on the client.
   const [creditWarning, setCreditWarning] = useState<{
     customerName: string;
     creditLimit: number;
     outstandingAfter: number;
-    show: boolean;
+    message: string;
+    entryId: string;
   } | null>(null);
 
   // Error State
@@ -229,27 +232,10 @@ export default function NewDispatchEntryPage() {
     !hasInsufficientStock;
 
   // Submit Handler
-  const handleSubmit = async (bypassCreditWarning = false) => {
+  const handleSubmit = async () => {
     if (!isFormValid || submitting) return;
 
     setFormError(null);
-
-    // Credit limit soft warning validation
-    if (selectedCustomer && !bypassCreditWarning) {
-      const limit = Number(selectedCustomer.creditLimit);
-      const currentOutstanding = Number(selectedCustomer.outstandingBalance);
-      const outstandingAfter = currentOutstanding + totals.totalAmount;
-
-      if (outstandingAfter > limit) {
-        setCreditWarning({
-          customerName: selectedCustomer.firmName,
-          creditLimit: limit,
-          outstandingAfter,
-          show: true,
-        });
-        return;
-      }
-    }
 
     try {
       setSubmitting(true);
@@ -275,9 +261,24 @@ export default function NewDispatchEntryPage() {
       if (!res.ok) {
         const errorMsg = result.error?.message || 'Failed to record dispatch entry';
         setFormError(errorMsg);
-      } else {
-        router.push(`/dispatch-entries/${result.data.id}`);
+        return;
       }
+
+      // The dispatch is recorded regardless; the server returns a non-blocking
+      // credit-limit warning when applicable. Surface it, then let the user
+      // continue to the created entry.
+      if (result.warning) {
+        setCreditWarning({
+          customerName: selectedCustomer?.firmName ?? '',
+          creditLimit: Number(result.warning.creditLimit),
+          outstandingAfter: Number(result.warning.outstandingAfter),
+          message: result.warning.message,
+          entryId: result.data.id,
+        });
+        return;
+      }
+
+      router.push(`/dispatch-entries/${result.data.id}`);
     } catch (error) {
       console.error('Submission failed', error);
       setFormError('An unexpected error occurred during submission.');
@@ -337,40 +338,33 @@ export default function NewDispatchEntryPage() {
         </div>
       )}
 
-      {/* Credit Limit Warning Modal / Banner */}
-      {creditWarning?.show && (
+      {/* Credit Limit Warning — server-reported, shown after the entry is recorded */}
+      {creditWarning && (
         <div className="flex flex-col justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-amber-400 md:flex-row md:items-center">
           <div className="flex items-start gap-3">
             <span className="material-symbols-outlined mt-0.5 text-[24px] text-amber-400">
               warning
             </span>
             <div>
-              <h5 className="text-body-lg font-bold">Credit Limit Exceeded Warning</h5>
+              <h5 className="text-body-lg font-bold">Credit Limit Exceeded</h5>
               <p className="text-body-sm mt-1">
-                This dispatch pushes{' '}
-                <strong className="text-primary">{creditWarning.customerName}</strong> beyond their
-                credit limit of{' '}
-                <strong className="text-primary">{formatINR(creditWarning.creditLimit)}</strong>.
-                Outstanding will become{' '}
+                {creditWarning.message}{' '}
+                <strong className="text-primary">{creditWarning.customerName}</strong> is now at{' '}
                 <strong className="text-primary">
                   {formatINR(creditWarning.outstandingAfter)}
-                </strong>
-                .
+                </strong>{' '}
+                against a credit limit of{' '}
+                <strong className="text-primary">{formatINR(creditWarning.creditLimit)}</strong>. The
+                dispatch entry has been recorded.
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
-              onClick={() => setCreditWarning(null)}
-              className="border-outline-variant text-on-surface text-body-sm rounded-lg border-[0.5px] px-4 py-2 font-medium transition-colors hover:bg-[#252525]"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleSubmit(true)}
+              onClick={() => router.push(`/dispatch-entries/${creditWarning.entryId}`)}
               className="text-body-sm rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black transition-colors hover:bg-amber-500"
             >
-              Proceed anyway
+              View dispatch entry
             </button>
           </div>
         </div>
@@ -690,7 +684,7 @@ export default function NewDispatchEntryPage() {
             Cancel
           </Link>
           <button
-            onClick={() => handleSubmit(false)}
+            onClick={() => handleSubmit()}
             disabled={!isFormValid || submitting}
             className={`font-body-md flex items-center gap-2 rounded-lg px-6 py-2 font-bold transition-all ${
               isFormValid && !submitting
