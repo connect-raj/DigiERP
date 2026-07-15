@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 
 const PAGE_LIMIT = 20;
@@ -20,6 +21,7 @@ type Vendor = {
 };
 
 export default function VendorsPage() {
+  const router = useRouter();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -258,6 +260,7 @@ export default function VendorsPage() {
               vendors.map((vendor) => (
                 <tr
                   key={vendor.id}
+                  onClick={() => router.push(`/vendors/${vendor.id}`)}
                   className="group cursor-pointer transition-colors hover:bg-[#252525]"
                 >
                   <td className="px-6 py-5">
