@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { customerService } from './customer.service';
 import { customerRepository } from '@/repositories/customer.repository';
+import { productRepository } from '@/repositories/product.repository';
 import { NotFoundError } from '@/lib/errors';
 
 vi.mock('@/repositories/customer.repository', () => ({
@@ -13,6 +14,13 @@ vi.mock('@/repositories/customer.repository', () => ({
     hasUnpaidInvoices: vi.fn(),
     hasOpenDispatch: vi.fn(),
     findPricesByCustomerId: vi.fn(),
+    setManualPrice: vi.fn(),
+  },
+}));
+
+vi.mock('@/repositories/product.repository', () => ({
+  productRepository: {
+    findById: vi.fn(),
   },
 }));
 
@@ -106,6 +114,39 @@ describe('CustomerService', () => {
 
       await customerService.delete('cust-1');
       expect(customerRepository.softDelete).toHaveBeenCalledWith('cust-1');
+    });
+  });
+
+  describe('setManualPrice', () => {
+    it('throws NotFoundError when the customer does not exist', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(null);
+      await expect(customerService.setManualPrice('missing', 'prod-1', 100)).rejects.toThrow(
+        NotFoundError
+      );
+    });
+
+    it('throws NotFoundError when the product does not exist', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(customer as never);
+      vi.spyOn(productRepository, 'findById').mockResolvedValue(null);
+      await expect(customerService.setManualPrice('cust-1', 'missing', 100)).rejects.toThrow(
+        NotFoundError
+      );
+    });
+
+    it('sets a manual price when both customer and product exist', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(customer as never);
+      vi.spyOn(productRepository, 'findById').mockResolvedValue({ id: 'prod-1' } as never);
+      vi.spyOn(customerRepository, 'setManualPrice').mockResolvedValue({
+        id: 'cp-1',
+        customerId: 'cust-1',
+        productId: 'prod-1',
+        price: 100,
+        isManual: true,
+      } as never);
+
+      const result = await customerService.setManualPrice('cust-1', 'prod-1', 100);
+      expect(customerRepository.setManualPrice).toHaveBeenCalledWith('cust-1', 'prod-1', 100);
+      expect(result.isManual).toBe(true);
     });
   });
 

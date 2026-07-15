@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { customerService } from '@/services/customer.service';
-import { createCustomerSchema, updateCustomerSchema } from '@/validations/customer';
+import {
+  createCustomerSchema,
+  updateCustomerSchema,
+  setCustomerPriceSchema,
+} from '@/validations/customer';
 import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
 import { parsePagination } from '@/lib/pagination';
 
@@ -63,6 +67,23 @@ export class CustomerController {
   async getPrices(_req: NextRequest, id: string) {
     const prices = await customerService.getPrices(id);
     return successResponse(prices);
+  }
+
+  async setPrice(req: NextRequest, id: string, productId: string) {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      throw new BadRequestError('Invalid JSON body');
+    }
+
+    const validated = setCustomerPriceSchema.safeParse(body);
+    if (!validated.success) {
+      throw new BadRequestError(validated.error.issues[0]?.message ?? 'Validation error');
+    }
+
+    const price = await customerService.setManualPrice(id, productId, validated.data.price);
+    return successResponse(price);
   }
 }
 

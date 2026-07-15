@@ -84,6 +84,30 @@ export class CustomerRepository {
       include: { product: true },
     });
   }
+
+  /**
+   * Set a manually-negotiated price for a customer/product. Marks the price as
+   * manual (so auto-invoicing will not overwrite it) and records a MANUAL entry
+   * in the price-history audit trail. Returns the price as a plain number.
+   */
+  async setManualPrice(customerId: string, productId: string, price: number) {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const customerPrice = await tx.customerPrice.upsert({
+        where: { customerId_productId: { customerId, productId } },
+        create: { customerId, productId, price, isManual: true },
+        update: { price, isManual: true },
+        include: { product: true },
+      });
+
+      await tx.priceHistory.create({
+        data: { customerId, productId, price, source: 'MANUAL' },
+      });
+
+      return customerPrice;
+    });
+
+    return { ...result, price: Number(result.price) };
+  }
 }
 
 export const customerRepository = new CustomerRepository();

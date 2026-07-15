@@ -1,4 +1,5 @@
 import { customerRepository } from '@/repositories/customer.repository';
+import { productRepository } from '@/repositories/product.repository';
 import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
 
@@ -46,6 +47,17 @@ export class CustomerService {
   async getPrices(id: string) {
     await this.getById(id);
     return customerRepository.findPricesByCustomerId(id);
+  }
+
+  async setManualPrice(customerId: string, productId: string, price: number) {
+    await this.getById(customerId);
+
+    const product = await productRepository.findById(productId);
+    if (!product) {
+      throw new NotFoundError(`Product with id '${productId}' not found`);
+    }
+
+    return customerRepository.setManualPrice(customerId, productId, price);
   }
 }
 

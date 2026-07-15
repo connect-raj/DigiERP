@@ -16,5 +16,10 @@ export const createCustomerSchema = z.object({
 
 export const updateCustomerSchema = createCustomerSchema.partial();
 
+export const setCustomerPriceSchema = z.object({
+  price: z.number().nonnegative('Price must be >= 0'),
+});
+
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
+export type SetCustomerPriceInput = z.infer<typeof setCustomerPriceSchema>;
