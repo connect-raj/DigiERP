@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 5;
+const PAGE_LIMIT = 20;
 
 type Vendor = {
   id: string;

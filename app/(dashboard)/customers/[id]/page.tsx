@@ -19,6 +19,18 @@ type CustomerPrice = {
   };
 };
 
+type PriceHistoryRow = {
+  id: string;
+  productId: string;
+  price: string | number;
+  source: string;
+  recordedAt: string;
+  product: {
+    name: string;
+    unit: string;
+  };
+};
+
 type DispatchEntry = {
   id: string;
   challanNo: string;
@@ -77,6 +89,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [prices, setPrices] = useState<CustomerPrice[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryRow[]>([]);
   const [dispatchEntries, setDispatchEntries] = useState<DispatchEntry[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -127,14 +140,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [custRes, pricesRes, dispatchRes, invoicesRes, paymentsRes] = await Promise.all([
-        fetch(`/api/customers/${id}`),
-        fetch(`/api/customers/${id}/prices`),
-        // Only the 5 most recent are shown below; default page-1 (10, date-desc) already covers that.
-        fetch(`/api/dispatch-entries?customerId=${id}`),
-        fetch(`/api/invoices?customerId=${id}`),
-        fetch(`/api/customers/${id}/payments`),
-      ]);
+      const [custRes, pricesRes, historyRes, dispatchRes, invoicesRes, paymentsRes] =
+        await Promise.all([
+          fetch(`/api/customers/${id}`),
+          fetch(`/api/customers/${id}/prices`),
+          fetch(`/api/customers/${id}/price-history`),
+          // Only the 5 most recent are shown below; default page-1 (10, date-desc) already covers that.
+          fetch(`/api/dispatch-entries?customerId=${id}`),
+          fetch(`/api/invoices?customerId=${id}`),
+          fetch(`/api/customers/${id}/payments`),
+        ]);
 
       const custData = await custRes.json();
       if (!custRes.ok || !custData.data) {
@@ -145,6 +160,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       const pricesData = await pricesRes.json();
       if (pricesData.data) setPrices(pricesData.data);
+
+      const historyData = await historyRes.json();
+      if (historyData.data) setPriceHistory(historyData.data.slice(0, 10));
 
       const dispatchData = await dispatchRes.json();
       if (dispatchData.data) setDispatchEntries(dispatchData.data.slice(0, 5));
@@ -401,6 +419,68 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                               <span className="material-symbols-outlined text-[18px]">edit</span>
                             </button>
                           )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Price History */}
+          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
+            <div className="border-outline-variant border-b-[0.5px] p-5">
+              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary">history</span>
+                Price History
+              </h2>
+            </div>
+            {priceHistory.length === 0 ? (
+              <p className="text-on-surface-variant text-body-sm p-6 text-center">
+                No price changes recorded yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-container-low border-outline-variant border-b-[0.5px]">
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
+                        Date
+                      </th>
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
+                        Product
+                      </th>
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
+                        Price
+                      </th>
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
+                        Source
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-outline-variant/30 divide-y">
+                    {priceHistory.map((row) => (
+                      <tr key={row.id} className="transition-colors hover:bg-[#222]">
+                        <td className="text-on-surface-variant px-5 py-3 text-[13px]">
+                          {formatDate(row.recordedAt)}
+                        </td>
+                        <td className="text-body-md text-primary px-5 py-3 font-medium">
+                          {row.product.name}
+                        </td>
+                        <td className="font-data-tabular text-primary px-5 py-3 text-right">
+                          {formatINR(row.price)} / {row.product.unit}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
+                              row.source === 'MANUAL'
+                                ? 'bg-secondary/15 text-secondary'
+                                : 'bg-surface-variant text-on-surface-variant'
+                            }`}
+                          >
+                            {row.source.replace('AUTO_INVOICE', 'Auto').replace('MANUAL', 'Manual')}
+                          </span>
                         </td>
                       </tr>
                     ))}

@@ -1,4 +1,4 @@
-export const DEFAULT_PAGE_LIMIT = 5;
+export const DEFAULT_PAGE_LIMIT = 20;
 
 export interface Pagination {
   page: number;

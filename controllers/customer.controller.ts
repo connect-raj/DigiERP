@@ -69,6 +69,13 @@ export class CustomerController {
     return successResponse(prices);
   }
 
+  async getPriceHistory(req: NextRequest, id: string) {
+    const { searchParams } = new URL(req.url);
+    const productId = searchParams.get('productId') ?? undefined;
+    const history = await customerService.getPriceHistory(id, productId);
+    return successResponse(history);
+  }
+
   async setPrice(req: NextRequest, id: string, productId: string) {
     let body: unknown;
     try {

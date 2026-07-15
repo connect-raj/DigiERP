@@ -85,6 +85,16 @@ export class CustomerRepository {
     });
   }
 
+  /** Price-change audit trail for a customer (optionally scoped to one product). */
+  async findPriceHistoryByCustomerId(customerId: string, productId?: string) {
+    const rows = await prisma.priceHistory.findMany({
+      where: { customerId, ...(productId && { productId }) },
+      include: { product: { select: { name: true, unit: true } } },
+      orderBy: { recordedAt: 'desc' },
+    });
+    return rows.map((row) => ({ ...row, price: Number(row.price) }));
+  }
+
   /**
    * Set a manually-negotiated price for a customer/product. Marks the price as
    * manual (so auto-invoicing will not overwrite it) and records a MANUAL entry

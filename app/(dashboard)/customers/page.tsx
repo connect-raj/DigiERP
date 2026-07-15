@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import CustomerFormDrawer, { Customer } from './_components/CustomerFormDrawer';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 5;
+const PAGE_LIMIT = 20;
 
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {

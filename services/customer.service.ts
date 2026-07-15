@@ -49,6 +49,11 @@ export class CustomerService {
     return customerRepository.findPricesByCustomerId(id);
   }
 
+  async getPriceHistory(id: string, productId?: string) {
+    await this.getById(id);
+    return customerRepository.findPriceHistoryByCustomerId(id, productId);
+  }
+
   async setManualPrice(customerId: string, productId: string, price: number) {
     await this.getById(customerId);
 
