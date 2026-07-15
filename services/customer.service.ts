@@ -1,9 +1,10 @@
 import { customerRepository } from '@/repositories/customer.repository';
-import { NotFoundError } from '@/lib/errors';
+import { productRepository } from '@/repositories/product.repository';
+import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
 
 export class CustomerService {
-  async getAll(params: { search?: string; skip?: number; take?: number }) {
+  async getAll(params: { search?: string; isActive?: boolean; skip?: number; take?: number }) {
     return customerRepository.findAll(params);
   }
 
@@ -24,9 +25,44 @@ export class CustomerService {
     return customerRepository.update(id, data);
   }
 
+  async delete(id: string): Promise<void> {
+    await this.getById(id);
+
+    if (await customerRepository.hasUnpaidInvoices(id)) {
+      throw new BadRequestError(
+        'Cannot deactivate a customer with unpaid invoices',
+        'CUSTOMER_HAS_UNPAID_INVOICES'
+      );
+    }
+    if (await customerRepository.hasOpenDispatch(id)) {
+      throw new BadRequestError(
+        'Cannot deactivate a customer with dispatch entries awaiting billing',
+        'CUSTOMER_HAS_OPEN_DISPATCH'
+      );
+    }
+
+    await customerRepository.softDelete(id);
+  }
+
   async getPrices(id: string) {
     await this.getById(id);
     return customerRepository.findPricesByCustomerId(id);
+  }
+
+  async getPriceHistory(id: string, productId?: string) {
+    await this.getById(id);
+    return customerRepository.findPriceHistoryByCustomerId(id, productId);
+  }
+
+  async setManualPrice(customerId: string, productId: string, price: number) {
+    await this.getById(customerId);
+
+    const product = await productRepository.findById(productId);
+    if (!product) {
+      throw new NotFoundError(`Product with id '${productId}' not found`);
+    }
+
+    return customerRepository.setManualPrice(customerId, productId, price);
   }
 }
 

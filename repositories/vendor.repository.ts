@@ -59,9 +59,8 @@ export class VendorRepository {
   }
 
   async hasPurchases(id: string): Promise<boolean> {
-    // No Purchase model yet — always false
-    void id;
-    return false;
+    const count = await prisma.purchase.count({ where: { vendorId: id } });
+    return count > 0;
   }
 
   async linkProducts(

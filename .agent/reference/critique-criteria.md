@@ -21,7 +21,7 @@ suggestion. Vibes-based review is not acceptable output.
 3. **Honesty in both directions.** If the work genuinely has no issues on a
    given criterion, mark it PASS and move on. Do not manufacture problems to
    look thorough. "Nothing to fix here" is a legitimate, complete result.
-4. **Independence gate.** When critiquing work produced earlier in the *same*
+4. **Independence gate.** When critiquing work produced earlier in the _same_
    conversation, the critique must be run by an independent subagent that is
    given only the artifact (code diff or plan document) and the codebase —
    never the original author's reasoning, plan rationale, or chat history.
@@ -51,17 +51,18 @@ suggestion. Vibes-based review is not acceptable output.
 Use this set when critiquing implemented code (a diff, a set of changed
 files, or a full module).
 
-| Dimension | Criteria |
-|---|---|
-| **Correctness** | `tests-pass`, `logic-correct`, `edge-cases` |
-| **Security** | `no-secrets`, `input-validated`, `no-injection`, `auth-enforced` |
-| **Quality** | `no-dead-code`, `no-placeholders`, `errors-handled`, `no-code-smell` |
-| **Performance** | `no-n-plus-1`, `no-hot-path-on2` |
-| **Consistency** | `types-match`, `naming-conventions`, `patterns-followed` |
-| **Integration** | `imports-resolve`, `tests-exist`, `no-regressions` |
-| **Architecture** | `boundaries-respected`, `no-hacky-shortcuts` |
+| Dimension        | Criteria                                                             |
+| ---------------- | -------------------------------------------------------------------- |
+| **Correctness**  | `tests-pass`, `logic-correct`, `edge-cases`                          |
+| **Security**     | `no-secrets`, `input-validated`, `no-injection`, `auth-enforced`     |
+| **Quality**      | `no-dead-code`, `no-placeholders`, `errors-handled`, `no-code-smell` |
+| **Performance**  | `no-n-plus-1`, `no-hot-path-on2`                                     |
+| **Consistency**  | `types-match`, `naming-conventions`, `patterns-followed`             |
+| **Integration**  | `imports-resolve`, `tests-exist`, `no-regressions`                   |
+| **Architecture** | `boundaries-respected`, `no-hacky-shortcuts`                         |
 
 Notes on the trickier criteria:
+
 - `no-code-smell` includes unnecessary complexity, over-abstraction (a helper
   or wrapper that exists to wrap a single line), and code that could be
   replaced by an existing stdlib function or already-imported utility. This
@@ -82,20 +83,21 @@ Use this set when critiquing a plan document (Step 3/4 output in `/feature`,
 Step 4 output in `/change`) **before** it is presented to the user for
 approval.
 
-| Dimension | Criteria |
-|---|---|
+| Dimension        | Criteria                                                          |
+| ---------------- | ----------------------------------------------------------------- |
 | **Completeness** | `requirements-covered`, `no-placeholders`, `edge-cases-addressed` |
-| **Correctness** | `apis-verified`, `patterns-match-library-usage` |
-| **Testability** | `specific-tests-per-step`, `e2e-verification-strategy` |
-| **Security** | `secrets-managed`, `input-validated`, `auth-designed` |
-| **Consistency** | `types-consistent`, `naming-follows-conventions` |
-| **Simplicity** | `no-overengineering`, `no-reinventing-solved-problems` |
-| **Dependencies** | `correct-task-ordering`, `all-deps-available` |
-| **Resilience** | `rollback-plan-exists`, `performance-considered` |
-| **Integration** | `import-paths-valid`, `follows-project-patterns` |
-| **Architecture** | `boundaries-respected`, `no-hacky-shortcuts` |
+| **Correctness**  | `apis-verified`, `patterns-match-library-usage`                   |
+| **Testability**  | `specific-tests-per-step`, `e2e-verification-strategy`            |
+| **Security**     | `secrets-managed`, `input-validated`, `auth-designed`             |
+| **Consistency**  | `types-consistent`, `naming-follows-conventions`                  |
+| **Simplicity**   | `no-overengineering`, `no-reinventing-solved-problems`            |
+| **Dependencies** | `correct-task-ordering`, `all-deps-available`                     |
+| **Resilience**   | `rollback-plan-exists`, `performance-considered`                  |
+| **Integration**  | `import-paths-valid`, `follows-project-patterns`                  |
+| **Architecture** | `boundaries-respected`, `no-hacky-shortcuts`                      |
 
 Notes:
+
 - `correct-task-ordering` — catches plans where a later step is a
   prerequisite for an earlier one (e.g. step 4 depends on something step 7
   produces).
@@ -138,6 +140,7 @@ If every criterion passes, the verdict is stated plainly (`READY TO SHIP` /
 ## Resolution rule
 
 Every FAIL must be either:
+
 - **Fixed** — the implementer applies the suggested fix (or an equivalent),
   then the critique agent re-checks only that criterion, or
 - **Rebutted** — the implementer writes a one-line reason the current

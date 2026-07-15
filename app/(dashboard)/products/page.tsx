@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 
-const PAGE_LIMIT = 5;
+const PAGE_LIMIT = 20;
 
 type Product = {
   id: string;
@@ -19,6 +20,7 @@ type Product = {
 };
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -285,7 +287,11 @@ export default function ProductsPage() {
               </tr>
             ) : (
               products.map((product) => (
-                <tr key={product.id} className="group transition-colors hover:bg-[#252525]">
+                <tr
+                  key={product.id}
+                  onClick={() => router.push(`/products/${product.id}`)}
+                  className="group cursor-pointer transition-colors hover:bg-[#252525]"
+                >
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className="text-primary font-semibold">{product.name}</span>
@@ -328,14 +334,20 @@ export default function ProductsPage() {
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
-                        onClick={() => openEditModal(product)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(product);
+                        }}
                         className="text-outline hover:text-primary rounded-md p-1.5 transition-colors"
                         title="Edit"
                       >
                         <span className="material-symbols-outlined text-[18px]">edit</span>
                       </button>
                       <button
-                        onClick={() => handleDelete(product.id, product.name)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(product.id, product.name);
+                        }}
                         className="text-outline hover:text-error rounded-md p-1.5 transition-colors"
                         title="Delete"
                       >

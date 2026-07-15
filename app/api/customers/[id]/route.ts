@@ -15,3 +15,10 @@ export const PUT = asyncHandler(
     return customerController.update(req, id);
   }
 );
+
+export const DELETE = asyncHandler(
+  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+    return customerController.delete(req, id);
+  }
+);

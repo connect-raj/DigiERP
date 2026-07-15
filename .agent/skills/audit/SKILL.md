@@ -7,9 +7,11 @@ argument-hint: [optional path or module to scope the audit to]
 # /audit — Codebase Performance & Quality Audit
 
 ## Trigger
+
 Invoked as: `/audit` (whole repo) or `/audit <path-or-module>` (scoped).
 
 Examples:
+
 ```
 /audit
 /audit src/api/invoices
@@ -23,6 +25,7 @@ either manually invoked or, if the runtime supports it, offered directly
 from the report (see Step 5).
 
 ## Inputs
+
 - `$SCOPE` (optional) — a path or module to limit the audit to. If omitted,
   audit the whole repository (excluding standard ignore paths: `node_modules`,
   `.git`, build output directories, vendored/generated code).
@@ -32,6 +35,7 @@ from the report (see Step 5).
 ## Workflow
 
 ### Step 1 — Establish scope and baseline
+
 - Resolve `$SCOPE` to a concrete file set. If no scope was given, enumerate
   the whole repo minus ignored paths.
 - Record the current git SHA and branch — this audit's findings are
@@ -42,7 +46,9 @@ from the report (see Step 5).
   and confirm the batching plan before proceeding.
 
 ### Step 2 — Load project standards
+
 Same as the critique framework in `critique-criteria.md`:
+
 - `CLAUDE.md` / `AGENTS.md` at the repo root.
 - ADR files (`docs/adr/`, `docs/decisions/`, `adr/`, `decisions/`,
   `doc/architecture/decisions/`, `**/ADR-*.md`).
@@ -51,12 +57,14 @@ Same as the critique framework in `critique-criteria.md`:
   — even if undocumented — and flag deviations from it.
 
 ### Step 3 — Run the audit
+
 Unlike `/feature` and `/change`, which critique a specific diff, `/audit`
 sweeps the whole scoped codebase. Apply the **code critique criteria** from
 `critique-criteria.md`, weighted toward the dimensions most relevant to a
 standing-codebase audit rather than a fresh diff:
 
 **Primary focus (this command's core purpose):**
+
 - **Performance** — `no-n-plus-1`, `no-hot-path-on2`, plus general bottleneck
   hunting beyond the base criteria:
   - Queries or I/O calls issued inside loops, especially per-request paths.
@@ -81,6 +89,7 @@ standing-codebase audit rather than a fresh diff:
     logic that clearly papers over a root cause rather than addressing it.
 
 **Secondary focus (still scored, lower priority in the report):**
+
 - **Quality** — `no-dead-code`, `no-placeholders`, `errors-handled`,
   `no-code-smell`. Dead code and unused exports are especially worth
   surfacing in a whole-codebase sweep since they're easy to miss diff-by-diff.
@@ -100,6 +109,7 @@ Every finding needs `file:line` evidence and a concrete fix, per the
 `critique-criteria.md` output rules. No vibes-based findings.
 
 ### Step 4 — Prioritize findings
+
 Group findings into a report ordered by:
 
 1. **Critical** — actively causes incorrect behavior, a security exposure,
@@ -119,7 +129,9 @@ slow" but the actual mechanism), the fix, and a rough effort estimate
 (trivial / small / medium / large).
 
 ### Step 5 — Present the report
+
 Present the findings grouped by severity. End with:
+
 - A one-line overall verdict (e.g. "3 critical, 5 high, 12 medium/low — the
   N+1 query in the invoice list endpoint is the one to fix first").
 - An offer: "Want me to fix any of these? I can run `/change` for a specific
@@ -134,6 +146,7 @@ guarantee intact and reuses `/change`'s existing safety gates rather than
 duplicating them.
 
 ### Step 6 — Log the audit
+
 Log this run per the logging convention in `critique-criteria.md`: timestamp,
 git SHA, scope, and the finding counts by severity. This lets successive
 audits be compared over time (e.g. "last audit had 8 high-severity findings,
@@ -142,6 +155,7 @@ this one has 3" as a rough regression/improvement signal).
 ---
 
 ## Notes for the agent runtime
+
 - `/audit` never modifies files. If asked to "just fix it while you're in
   there," decline and redirect to `/change` — the separation is intentional:
   audits should be safe to run anytime, including on branches you don't

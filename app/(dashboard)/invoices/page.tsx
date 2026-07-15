@@ -22,7 +22,7 @@ type Invoice = {
 
 type Customer = { id: string; firmName: string };
 
-const PAGE_LIMIT = 5;
+const PAGE_LIMIT = 20;
 
 function formatINR(val: string | number) {
   return new Intl.NumberFormat('en-IN', {

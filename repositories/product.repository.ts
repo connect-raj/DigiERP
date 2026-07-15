@@ -71,9 +71,15 @@ export class ProductRepository {
   }
 
   async hasOpenChallans(id: string): Promise<boolean> {
-    // No Challan model yet — always false
-    void id;
-    return false;
+    // An "open challan" is a dispatch entry still awaiting billing (not cancelled)
+    // that references this product.
+    const count = await prisma.dispatchEntryItem.count({
+      where: {
+        productId: id,
+        dispatchEntry: { status: 'PENDING_BILLING', isCancelled: false },
+      },
+    });
+    return count > 0;
   }
 
   async getStock(id: string) {

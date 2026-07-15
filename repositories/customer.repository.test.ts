@@ -14,6 +14,12 @@ vi.mock('@/lib/prisma', () => ({
     customerPrice: {
       findMany: vi.fn(),
     },
+    invoice: {
+      count: vi.fn(),
+    },
+    dispatchEntry: {
+      count: vi.fn(),
+    },
   },
 }));
 
@@ -96,6 +102,55 @@ describe('CustomerRepository', () => {
         where: { id: 'cust-1' },
         data: { firmName: 'New Name' },
       });
+    });
+  });
+
+  describe('findAll (isActive filter)', () => {
+    it('applies the isActive filter when provided', async () => {
+      vi.mocked(prisma.customer.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.customer.count).mockResolvedValue(0);
+      await customerRepository.findAll({ isActive: true });
+      expect(prisma.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { isActive: true } })
+      );
+    });
+  });
+
+  describe('softDelete', () => {
+    it('sets isActive to false', async () => {
+      vi.mocked(prisma.customer.update).mockResolvedValue({} as never);
+      await customerRepository.softDelete('cust-1');
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: 'cust-1' },
+        data: { isActive: false },
+      });
+    });
+  });
+
+  describe('hasUnpaidInvoices', () => {
+    it('counts invoices that are not fully paid', async () => {
+      vi.mocked(prisma.invoice.count).mockResolvedValue(2);
+      const result = await customerRepository.hasUnpaidInvoices('cust-1');
+      expect(prisma.invoice.count).toHaveBeenCalledWith({
+        where: { customerId: 'cust-1', paymentStatus: { not: 'PAID' } },
+      });
+      expect(result).toBe(true);
+    });
+
+    it('returns false when all invoices are paid', async () => {
+      vi.mocked(prisma.invoice.count).mockResolvedValue(0);
+      expect(await customerRepository.hasUnpaidInvoices('cust-1')).toBe(false);
+    });
+  });
+
+  describe('hasOpenDispatch', () => {
+    it('counts non-cancelled dispatch entries awaiting billing', async () => {
+      vi.mocked(prisma.dispatchEntry.count).mockResolvedValue(1);
+      const result = await customerRepository.hasOpenDispatch('cust-1');
+      expect(prisma.dispatchEntry.count).toHaveBeenCalledWith({
+        where: { customerId: 'cust-1', status: 'PENDING_BILLING', isCancelled: false },
+      });
+      expect(result).toBe(true);
     });
   });
 

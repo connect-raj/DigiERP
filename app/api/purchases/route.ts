@@ -8,8 +8,6 @@ import { parsePagination } from '@/lib/pagination';
 import { generatePurchaseNo } from '@/lib/purchase-no';
 import { determineGstType } from '@/lib/gst';
 
-const COMPANY_STATE = 'Gujarat';
-
 const purchaseCreateSchema = z.object({
   vendorId: z.string().uuid(),
   vendorInvoiceNo: z.string().min(1),
@@ -124,6 +122,11 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     throw new NotFoundError('Vendor not found');
   }
 
+  const settings = await prisma.settings.findFirst();
+  if (!settings) {
+    throw new BadRequestError('Company settings are not configured', 'SETTINGS_NOT_CONFIGURED');
+  }
+
   const productIds = data.items.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
@@ -135,7 +138,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   }
 
   const productMap = new Map(products.map((p) => [p.id, p]));
-  const gstType = determineGstType(COMPANY_STATE, vendor.state);
+  const gstType = determineGstType(settings.companyState, vendor.state);
 
   let totalAmount = 0;
   let totalGst = 0;

@@ -19,6 +19,18 @@ type CustomerPrice = {
   };
 };
 
+type PriceHistoryRow = {
+  id: string;
+  productId: string;
+  price: string | number;
+  source: string;
+  recordedAt: string;
+  product: {
+    name: string;
+    unit: string;
+  };
+};
+
 type DispatchEntry = {
   id: string;
   challanNo: string;
@@ -77,6 +89,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [prices, setPrices] = useState<CustomerPrice[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryRow[]>([]);
   const [dispatchEntries, setDispatchEntries] = useState<DispatchEntry[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -86,17 +99,57 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
 
+  const [products, setProducts] = useState<{ id: string; name: string; unit: string }[]>([]);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [priceInput, setPriceInput] = useState('');
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [addingPrice, setAddingPrice] = useState(false);
+  const [newPriceProductId, setNewPriceProductId] = useState('');
+
+  const savePrice = async (productId: string) => {
+    const parsed = Number(priceInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      window.alert('Enter a valid non-negative price.');
+      return;
+    }
+    try {
+      setSavingPrice(true);
+      const res = await fetch(`/api/customers/${id}/prices/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: parsed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to save price');
+        return;
+      }
+      setEditingProductId(null);
+      setAddingPrice(false);
+      setNewPriceProductId('');
+      setPriceInput('');
+      fetchData();
+    } catch (err) {
+      console.error('Failed to save price', err);
+      window.alert('Failed to save price');
+    } finally {
+      setSavingPrice(false);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [custRes, pricesRes, dispatchRes, invoicesRes, paymentsRes] = await Promise.all([
-        fetch(`/api/customers/${id}`),
-        fetch(`/api/customers/${id}/prices`),
-        // Only the 5 most recent are shown below; default page-1 (10, date-desc) already covers that.
-        fetch(`/api/dispatch-entries?customerId=${id}`),
-        fetch(`/api/invoices?customerId=${id}`),
-        fetch(`/api/customers/${id}/payments`),
-      ]);
+      const [custRes, pricesRes, historyRes, dispatchRes, invoicesRes, paymentsRes] =
+        await Promise.all([
+          fetch(`/api/customers/${id}`),
+          fetch(`/api/customers/${id}/prices`),
+          fetch(`/api/customers/${id}/price-history`),
+          // Only the 5 most recent are shown below; default page-1 (10, date-desc) already covers that.
+          fetch(`/api/dispatch-entries?customerId=${id}`),
+          fetch(`/api/invoices?customerId=${id}`),
+          fetch(`/api/customers/${id}/payments`),
+        ]);
 
       const custData = await custRes.json();
       if (!custRes.ok || !custData.data) {
@@ -107,6 +160,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       const pricesData = await pricesRes.json();
       if (pricesData.data) setPrices(pricesData.data);
+
+      const historyData = await historyRes.json();
+      if (historyData.data) setPriceHistory(historyData.data.slice(0, 10));
 
       const dispatchData = await dispatchRes.json();
       if (dispatchData.data) setDispatchEntries(dispatchData.data.slice(0, 5));
@@ -125,9 +181,27 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    // Product picker for setting a manual price needs the full list, not a page.
+    fetch('/api/products?limit=1000')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.data) {
+          setProducts(
+            data.data.map((p: { id: string; name: string; unit: string }) => ({
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+            }))
+          );
+        }
+      })
+      .catch((err) => console.error('Failed to fetch products', err));
+  }, []);
 
   if (loading) {
     return (
@@ -208,16 +282,62 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         <div className="flex flex-col gap-6 lg:col-span-2">
           {/* Negotiated Prices */}
           <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant border-b-[0.5px] p-5">
+            <div className="border-outline-variant flex items-center justify-between border-b-[0.5px] p-5">
               <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
                 <span className="material-symbols-outlined text-secondary">sell</span>
                 Negotiated Prices
               </h2>
+              <button
+                onClick={() => {
+                  setAddingPrice((v) => !v);
+                  setNewPriceProductId('');
+                  setPriceInput('');
+                  setEditingProductId(null);
+                }}
+                className="border-outline-variant text-on-surface hover:bg-surface-container-high flex items-center gap-1.5 rounded-lg border-[0.5px] px-3 py-1.5 text-[13px] font-medium transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Set Manual Price
+              </button>
             </div>
-            {prices.length === 0 ? (
+
+            {addingPrice && (
+              <div className="border-outline-variant bg-surface-container-low flex flex-wrap items-center gap-3 border-b-[0.5px] p-4">
+                <select
+                  value={newPriceProductId}
+                  onChange={(e) => setNewPriceProductId(e.target.value)}
+                  className="bg-surface-container-lowest border-outline-variant text-body-sm rounded-lg border-[0.5px] px-3 py-2"
+                >
+                  <option value="">Select product…</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={priceInput}
+                  onChange={(e) => setPriceInput(e.target.value)}
+                  placeholder="Price"
+                  className="bg-surface-container-lowest border-outline-variant text-body-sm w-32 rounded-lg border-[0.5px] px-3 py-2"
+                />
+                <button
+                  disabled={!newPriceProductId || savingPrice}
+                  onClick={() => savePrice(newPriceProductId)}
+                  className="bg-secondary text-on-secondary rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                >
+                  {savingPrice ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            )}
+
+            {prices.length === 0 && !addingPrice ? (
               <p className="text-on-surface-variant text-body-sm p-6 text-center">
                 No negotiated prices yet. Prices are recorded automatically the first time a product
-                is invoiced to this customer.
+                is invoiced to this customer, or set one manually above.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -233,6 +353,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
                         Source
                       </th>
+                      <th className="px-5 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-outline-variant/30 divide-y">
@@ -242,7 +363,20 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           {cp.product.name}
                         </td>
                         <td className="font-data-tabular text-primary px-5 py-3 text-right">
-                          {formatINR(cp.price)} / {cp.product.unit}
+                          {editingProductId === cp.productId ? (
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={priceInput}
+                              onChange={(e) => setPriceInput(e.target.value)}
+                              className="bg-surface-container-lowest border-outline-variant w-28 rounded-lg border-[0.5px] px-2 py-1 text-right"
+                            />
+                          ) : (
+                            <>
+                              {formatINR(cp.price)} / {cp.product.unit}
+                            </>
+                          )}
                         </td>
                         <td className="px-5 py-3">
                           <span
@@ -253,6 +387,99 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             }`}
                           >
                             {cp.isManual ? 'Manual' : 'Auto'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {editingProductId === cp.productId ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                disabled={savingPrice}
+                                onClick={() => savePrice(cp.productId)}
+                                className="text-secondary text-[13px] font-semibold disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingProductId(null)}
+                                className="text-on-surface-variant text-[13px]"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingProductId(cp.productId);
+                                setAddingPrice(false);
+                                setPriceInput(String(Number(cp.price)));
+                              }}
+                              className="text-on-surface-variant hover:text-primary rounded p-1"
+                              title="Edit price"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">edit</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Price History */}
+          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
+            <div className="border-outline-variant border-b-[0.5px] p-5">
+              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary">history</span>
+                Price History
+              </h2>
+            </div>
+            {priceHistory.length === 0 ? (
+              <p className="text-on-surface-variant text-body-sm p-6 text-center">
+                No price changes recorded yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-container-low border-outline-variant border-b-[0.5px]">
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
+                        Date
+                      </th>
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
+                        Product
+                      </th>
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
+                        Price
+                      </th>
+                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
+                        Source
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-outline-variant/30 divide-y">
+                    {priceHistory.map((row) => (
+                      <tr key={row.id} className="transition-colors hover:bg-[#222]">
+                        <td className="text-on-surface-variant px-5 py-3 text-[13px]">
+                          {formatDate(row.recordedAt)}
+                        </td>
+                        <td className="text-body-md text-primary px-5 py-3 font-medium">
+                          {row.product.name}
+                        </td>
+                        <td className="font-data-tabular text-primary px-5 py-3 text-right">
+                          {formatINR(row.price)} / {row.product.unit}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
+                              row.source === 'MANUAL'
+                                ? 'bg-secondary/15 text-secondary'
+                                : 'bg-surface-variant text-on-surface-variant'
+                            }`}
+                          >
+                            {row.source.replace('AUTO_INVOICE', 'Auto').replace('MANUAL', 'Manual')}
                           </span>
                         </td>
                       </tr>

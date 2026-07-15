@@ -23,7 +23,7 @@ type Payment = {
 
 type Customer = { id: string; firmName: string };
 
-const PAGE_LIMIT = 5;
+const PAGE_LIMIT = 20;
 const MODES = ['ALL', 'CASH', 'BANK_TRANSFER', 'CHEQUE', 'UPI', 'OTHER'];
 
 function formatINR(val: string | number) {

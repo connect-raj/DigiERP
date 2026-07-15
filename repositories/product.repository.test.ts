@@ -16,6 +16,9 @@ vi.mock('@/lib/prisma', () => ({
     stockTransaction: {
       create: vi.fn(),
     },
+    dispatchEntryItem: {
+      count: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -158,7 +161,20 @@ describe('ProductRepository', () => {
   });
 
   describe('hasOpenChallans', () => {
-    it('should return false (stub — no Challan model yet)', async () => {
+    it('should return true when an unbilled, non-cancelled dispatch references the product', async () => {
+      vi.mocked(prisma.dispatchEntryItem.count).mockResolvedValue(1);
+      const result = await productRepository.hasOpenChallans('prod-id-1');
+      expect(prisma.dispatchEntryItem.count).toHaveBeenCalledWith({
+        where: {
+          productId: 'prod-id-1',
+          dispatchEntry: { status: 'PENDING_BILLING', isCancelled: false },
+        },
+      });
+      expect(result).toBe(true);
+    });
+
+    it('should return false when there are no open challans', async () => {
+      vi.mocked(prisma.dispatchEntryItem.count).mockResolvedValue(0);
       const result = await productRepository.hasOpenChallans('prod-id-1');
       expect(result).toBe(false);
     });

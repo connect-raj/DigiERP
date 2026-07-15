@@ -14,6 +14,9 @@ vi.mock('@/lib/prisma', () => ({
     vendorProduct: {
       delete: vi.fn(),
     },
+    purchase: {
+      count: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -136,7 +139,17 @@ describe('VendorRepository', () => {
   });
 
   describe('hasPurchases', () => {
-    it('should return false (stub — no Purchase model yet)', async () => {
+    it('should return true when the vendor has purchases', async () => {
+      vi.mocked(prisma.purchase.count).mockResolvedValue(2);
+      const result = await vendorRepository.hasPurchases('vendor-id-1');
+      expect(prisma.purchase.count).toHaveBeenCalledWith({
+        where: { vendorId: 'vendor-id-1' },
+      });
+      expect(result).toBe(true);
+    });
+
+    it('should return false when the vendor has no purchases', async () => {
+      vi.mocked(prisma.purchase.count).mockResolvedValue(0);
       const result = await vendorRepository.hasPurchases('vendor-id-1');
       expect(result).toBe(false);
     });
