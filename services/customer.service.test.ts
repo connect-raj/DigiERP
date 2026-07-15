@@ -9,6 +9,9 @@ vi.mock('@/repositories/customer.repository', () => ({
     findById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    softDelete: vi.fn(),
+    hasUnpaidInvoices: vi.fn(),
+    hasOpenDispatch: vi.fn(),
     findPricesByCustomerId: vi.fn(),
   },
 }));
@@ -60,6 +63,49 @@ describe('CustomerService', () => {
       const result = await customerService.update('cust-1', { firmName: 'New Name' });
       expect(result.firmName).toBe('New Name');
       expect(customerRepository.update).toHaveBeenCalledWith('cust-1', { firmName: 'New Name' });
+    });
+  });
+
+  describe('delete', () => {
+    it('throws NotFoundError when the customer does not exist', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(null);
+      await expect(customerService.delete('missing')).rejects.toThrow(NotFoundError);
+    });
+
+    it('blocks deactivation when the customer has unpaid invoices', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(customer as never);
+      vi.spyOn(customerRepository, 'hasUnpaidInvoices').mockResolvedValue(true);
+      const softDeleteSpy = vi.spyOn(customerRepository, 'softDelete');
+
+      await expect(customerService.delete('cust-1')).rejects.toThrow(
+        expect.objectContaining({ code: 'CUSTOMER_HAS_UNPAID_INVOICES' })
+      );
+      expect(softDeleteSpy).not.toHaveBeenCalled();
+    });
+
+    it('blocks deactivation when the customer has dispatch entries awaiting billing', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(customer as never);
+      vi.spyOn(customerRepository, 'hasUnpaidInvoices').mockResolvedValue(false);
+      vi.spyOn(customerRepository, 'hasOpenDispatch').mockResolvedValue(true);
+      const softDeleteSpy = vi.spyOn(customerRepository, 'softDelete');
+
+      await expect(customerService.delete('cust-1')).rejects.toThrow(
+        expect.objectContaining({ code: 'CUSTOMER_HAS_OPEN_DISPATCH' })
+      );
+      expect(softDeleteSpy).not.toHaveBeenCalled();
+    });
+
+    it('soft-deletes a customer with no unpaid invoices or open dispatch', async () => {
+      vi.spyOn(customerRepository, 'findById').mockResolvedValue(customer as never);
+      vi.spyOn(customerRepository, 'hasUnpaidInvoices').mockResolvedValue(false);
+      vi.spyOn(customerRepository, 'hasOpenDispatch').mockResolvedValue(false);
+      vi.spyOn(customerRepository, 'softDelete').mockResolvedValue({
+        ...customer,
+        isActive: false,
+      } as never);
+
+      await customerService.delete('cust-1');
+      expect(customerRepository.softDelete).toHaveBeenCalledWith('cust-1');
     });
   });
 

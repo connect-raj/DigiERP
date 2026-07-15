@@ -8,9 +8,11 @@ export class CustomerController {
   async getAll(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') ?? undefined;
+    const isActiveParam = searchParams.get('isActive');
+    const isActive = isActiveParam === null ? undefined : isActiveParam === 'true';
     const { page, limit, skip, take } = parsePagination(searchParams);
 
-    const { data, total } = await customerService.getAll({ search, skip, take });
+    const { data, total } = await customerService.getAll({ search, isActive, skip, take });
     return paginatedResponse(data, { page, limit, total });
   }
 
@@ -51,6 +53,11 @@ export class CustomerController {
 
     const customer = await customerService.update(id, validated.data);
     return successResponse(customer);
+  }
+
+  async delete(_req: NextRequest, id: string) {
+    await customerService.delete(id);
+    return successResponse({ id, isActive: false });
   }
 
   async getPrices(_req: NextRequest, id: string) {

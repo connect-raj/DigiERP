@@ -69,6 +69,28 @@ export default function CustomersPage() {
     setIsDrawerOpen(true);
   };
 
+  const handleDeactivate = async (customer: Customer) => {
+    if (
+      !window.confirm(
+        `Deactivate ${customer.firmName}? They will be hidden from active lists. This is blocked if they have unpaid invoices or dispatches awaiting billing.`
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/customers/${customer.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to deactivate customer');
+        return;
+      }
+      fetchCustomers();
+    } catch (error) {
+      console.error('Failed to deactivate customer', error);
+      window.alert('Failed to deactivate customer');
+    }
+  };
+
   const outstandingColor = (outstanding: number, limit: number) => {
     if (limit > 0 && outstanding > limit) return 'text-error';
     if (outstanding > 0) return 'text-amber-400';
@@ -211,6 +233,15 @@ export default function CustomersPage() {
                           title="Edit"
                         >
                           <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeactivate(customer)}
+                          className="text-on-surface-variant hover:text-error hover:bg-surface-variant ml-1 rounded p-1.5 opacity-0 transition-all group-hover:opacity-100"
+                          title="Deactivate"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            person_off
+                          </span>
                         </button>
                       </td>
                     </tr>
