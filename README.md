@@ -20,6 +20,15 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Database (Prisma)
+
+Schema changes go through migrations — **do not use `prisma db push`**. `prisma/migrations/` is committed to git and is the source of truth for schema history.
+
+- Change `prisma/schema.prisma`, then run `npm run db:migrate` to generate and apply a new migration in dev (this also regenerates the Prisma client).
+- Check migration state at any time with `npm run db:migrate:status`.
+- In CI/production, apply already-committed migrations with `npm run db:migrate:deploy` (never `migrate dev`, which can prompt for destructive resets).
+- If a migration's SQL file is ever hand-edited after being applied, its checksum will no longer match and `migrate dev`/`migrate deploy` will refuse to run and offer to reset the database — don't accept that reset; fix the underlying migration file/state deliberately instead.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
