@@ -6,9 +6,9 @@ vi.mock('@/repositories/dashboard.repository', () => ({
   dashboardRepository: {
     findSettings: vi.fn(),
     findInvoicesInRange: vi.fn(),
-    findPaymentsInRange: vi.fn(),
-    findPurchasesInRange: vi.fn(),
-    findInvoiceItemsInRange: vi.fn(),
+    sumPaymentsInRange: vi.fn(),
+    findVendorPayablesInRange: vi.fn(),
+    findTopCategorySalesInRange: vi.fn(),
     findActiveProducts: vi.fn(),
     findAllCustomers: vi.fn(),
     findRecentDispatchEntries: vi.fn(),
@@ -20,9 +20,9 @@ vi.mock('@/repositories/dashboard.repository', () => ({
 
 function mockEmptyRepo() {
   vi.spyOn(dashboardRepository, 'findInvoicesInRange').mockResolvedValue([] as never);
-  vi.spyOn(dashboardRepository, 'findPaymentsInRange').mockResolvedValue([] as never);
-  vi.spyOn(dashboardRepository, 'findPurchasesInRange').mockResolvedValue([] as never);
-  vi.spyOn(dashboardRepository, 'findInvoiceItemsInRange').mockResolvedValue([] as never);
+  vi.spyOn(dashboardRepository, 'sumPaymentsInRange').mockResolvedValue(0);
+  vi.spyOn(dashboardRepository, 'findVendorPayablesInRange').mockResolvedValue([] as never);
+  vi.spyOn(dashboardRepository, 'findTopCategorySalesInRange').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findActiveProducts').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findAllCustomers').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findRecentDispatchEntries').mockResolvedValue([] as never);
@@ -81,9 +81,7 @@ describe('DashboardService', () => {
         { date: new Date('2026-07-01'), totalAmount: 1000 },
         { date: new Date('2026-07-05'), totalAmount: 500 },
       ] as never);
-      vi.spyOn(dashboardRepository, 'findPaymentsInRange').mockResolvedValue([
-        { amount: 700 },
-      ] as never);
+      vi.spyOn(dashboardRepository, 'sumPaymentsInRange').mockResolvedValue(700);
 
       const result = await dashboardService.getDashboard('month');
 
@@ -95,10 +93,9 @@ describe('DashboardService', () => {
     it('aggregates per vendor and excludes fully-paid purchases from the pending list', async () => {
       vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
       mockEmptyRepo();
-      vi.spyOn(dashboardRepository, 'findPurchasesInRange').mockResolvedValue([
-        { totalAmount: 1000, paidAmount: 200, vendor: { id: 'v1', name: 'Vendor A' } },
-        { totalAmount: 500, paidAmount: 500, vendor: { id: 'v2', name: 'Vendor B' } },
-        { totalAmount: 300, paidAmount: 0, vendor: { id: 'v1', name: 'Vendor A' } },
+      vi.spyOn(dashboardRepository, 'findVendorPayablesInRange').mockResolvedValue([
+        { vendorId: 'v1', vendorName: 'Vendor A', totalAmount: 1300, paidAmount: 200 },
+        { vendorId: 'v2', vendorName: 'Vendor B', totalAmount: 500, paidAmount: 500 },
       ] as never);
 
       const result = await dashboardService.getDashboard('month');
@@ -147,10 +144,13 @@ describe('DashboardService', () => {
       vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
       mockEmptyRepo();
       const items = Array.from({ length: 6 }, (_, i) => ({
-        lineTotal: (i + 1) * 100,
-        product: { category: { id: `cat-${i}`, name: `Category ${i}` } },
-      }));
-      vi.spyOn(dashboardRepository, 'findInvoiceItemsInRange').mockResolvedValue(items as never);
+        categoryId: `cat-${i}`,
+        categoryName: `Category ${i}`,
+        amount: (i + 1) * 100,
+      })).reverse();
+      vi.spyOn(dashboardRepository, 'findTopCategorySalesInRange').mockResolvedValue(
+        items as never
+      );
 
       const result = await dashboardService.getDashboard('month');
 

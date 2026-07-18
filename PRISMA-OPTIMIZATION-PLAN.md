@@ -18,7 +18,15 @@ Baseline migration `prisma/migrations/20260718170142_init` created and marked ap
 
 **Also decide**: dev database source. Current `.env` points at a remote Neon endpoint (non-pooled, in `ap-southeast-1`) rather than local Postgres per `.env.example`. Worth resolving alongside the migration switch since it affects how "safe" `migrate dev` resets feel in practice (shared remote dev DB vs. disposable local one).
 
-## Phase 2 — Query & index optimization (via migrations from Phase 1)
+## Phase 2 — Query & index optimization (via migrations from Phase 1) (DONE 2026-07-18)
+
+- Added `@@index` on all flagged FK/filter columns via migration `20260718172555_add_fk_and_filter_indexes` (30 indexes). Verified via `EXPLAIN`/`EXPLAIN ANALYZE` that Postgres now uses these indexes instead of sequential scans.
+- Switched dev `DATABASE_URL` to Neon's pooled (`-pooler`) endpoint with `connection_limit=10&pool_timeout=20`. (`.env` is gitignored, not part of this commit — update your local `.env` manually if you pull this branch.)
+- Cut `payment.repository.ts allocateBatch` from 7 sequential DB round trips per allocation to 2 parallel groups, using filtered `update()` calls instead of `updateMany`+re-read, and `Promise.all`/`Promise.allSettled` for independent writes within the same interactive transaction (verified this is safe against the real Neon DB — concurrent queries on different rows within one `$transaction` callback work correctly).
+- Batched per-item `stockTransaction.create` loops into single `createMany` calls in `dispatch-entry.repository.ts` (create + cancel) and `app/api/purchases/route.ts` / `[id]/route.ts`; parallelized `vendor.repository.ts linkProducts`'s per-product upserts.
+- Replaced unbounded `findMany` + JS-side `.reduce`/grouping in `dashboard.repository.ts`/`dashboard.service.ts` with `prisma.aggregate`/`groupBy` for payments-collected, vendor-payables, and top-category-sales.
+- Narrowed broad `include` to `select` in `product.repository.ts`, `vendor.repository.ts`, `dispatch-entry.repository.ts findById`, and `app/api/purchases/[id]/route.ts` GET, based on an audit of which fields each frontend page actually renders.
+- All 246 existing tests pass; typecheck and lint show no new issues.
 
 1. **Add missing indexes** as a proper migration — `@@index` on FK + filter columns: `Invoice.customerId/date/paymentStatus`, `Payment.customerId/date/mode`, `Purchase.vendorId/date/paymentStatus/isCancelled`, `DispatchEntry.customerId/date/status/isCancelled`, `StockTransaction.productId/purchaseId/dispatchEntryId/performedById`, plus item-table FKs (`PurchaseItem`, `InvoiceItem`, `DispatchEntryItem`, `VendorPayment`, `PaymentAllocation`, `PriceHistory`).
 2. **Fix connection pooling** for dev/prod — use Neon's pooled (`-pooler`) endpoint with `connection_limit`/`pool_timeout` set on `DATABASE_URL`.

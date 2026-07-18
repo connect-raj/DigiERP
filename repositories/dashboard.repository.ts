@@ -13,36 +13,70 @@ export class DashboardRepository {
     });
   }
 
-  async findPaymentsInRange(range: PeriodRange) {
-    return prisma.payment.findMany({
+  async sumPaymentsInRange(range: PeriodRange) {
+    const result = await prisma.payment.aggregate({
       where: { date: { gte: range.start, lt: range.end } },
-      select: { amount: true },
+      _sum: { amount: true },
     });
+    return Number(result._sum.amount ?? 0);
   }
 
   // isCancelled purchases don't represent a real payable, so they're excluded here.
-  async findPurchasesInRange(range: PeriodRange) {
-    return prisma.purchase.findMany({
+  async findVendorPayablesInRange(range: PeriodRange) {
+    const grouped = await prisma.purchase.groupBy({
+      by: ['vendorId'],
       where: {
         date: { gte: range.start, lt: range.end },
         isCancelled: false,
       },
-      select: {
-        totalAmount: true,
-        paidAmount: true,
-        vendor: { select: { id: true, name: true } },
-      },
+      _sum: { totalAmount: true, paidAmount: true },
     });
+
+    if (grouped.length === 0) return [];
+
+    const vendors = await prisma.vendor.findMany({
+      where: { id: { in: grouped.map((g) => g.vendorId) } },
+      select: { id: true, name: true },
+    });
+    const vendorNameById = new Map(vendors.map((v) => [v.id, v.name]));
+
+    return grouped.map((g) => ({
+      vendorId: g.vendorId,
+      vendorName: vendorNameById.get(g.vendorId) ?? g.vendorId,
+      totalAmount: Number(g._sum.totalAmount ?? 0),
+      paidAmount: Number(g._sum.paidAmount ?? 0),
+    }));
   }
 
-  async findInvoiceItemsInRange(range: PeriodRange) {
-    return prisma.invoiceItem.findMany({
+  async findTopCategorySalesInRange(range: PeriodRange) {
+    const grouped = await prisma.invoiceItem.groupBy({
+      by: ['productId'],
       where: { invoice: { date: { gte: range.start, lt: range.end } } },
-      select: {
-        lineTotal: true,
-        product: { select: { category: { select: { id: true, name: true } } } },
-      },
+      _sum: { lineTotal: true },
     });
+
+    if (grouped.length === 0) return [];
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: grouped.map((g) => g.productId) } },
+      select: { id: true, category: { select: { id: true, name: true } } },
+    });
+    const categoryByProductId = new Map(products.map((p) => [p.id, p.category]));
+
+    const byCategory = new Map<string, { categoryId: string; categoryName: string; amount: number }>();
+    for (const g of grouped) {
+      const category = categoryByProductId.get(g.productId);
+      if (!category) continue;
+      const amount = Number(g._sum.lineTotal ?? 0);
+      const existing = byCategory.get(category.id);
+      if (existing) {
+        existing.amount += amount;
+      } else {
+        byCategory.set(category.id, { categoryId: category.id, categoryName: category.name, amount });
+      }
+    }
+
+    return [...byCategory.values()].sort((a, b) => b.amount - a.amount);
   }
 
   async findActiveProducts() {

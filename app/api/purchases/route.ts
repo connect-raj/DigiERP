@@ -202,26 +202,30 @@ export const POST = asyncHandler(async (request: NextRequest) => {
       },
     });
 
-    for (const item of data.items) {
+    const stockTxnData = data.items.map((item) => {
       const product = productMap.get(item.productId)!;
       const stockBefore = Number(product.currentStock);
       const stockAfter = stockBefore + item.quantity;
 
-      await tx.stockTransaction.create({
-        data: {
-          productId: item.productId,
-          changeQty: item.quantity,
-          stockBefore,
-          stockAfter,
-          reason: 'PURCHASE',
-          purchaseId: purchase.id,
-        },
-      });
+      return {
+        productId: item.productId,
+        changeQty: item.quantity,
+        stockBefore,
+        stockAfter,
+        reason: 'PURCHASE',
+        purchaseId: purchase.id,
+      };
+    });
 
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { currentStock: stockAfter },
-      });
+    await tx.stockTransaction.createMany({ data: stockTxnData });
+
+    // last item for a given product wins, matching the prior sequential-update behavior
+    const finalStockByProduct = new Map<string, number>();
+    for (const txnItem of stockTxnData) {
+      finalStockByProduct.set(txnItem.productId, txnItem.stockAfter);
+    }
+    for (const [productId, finalStock] of finalStockByProduct) {
+      await tx.product.update({ where: { id: productId }, data: { currentStock: finalStock } });
     }
 
     return purchase;

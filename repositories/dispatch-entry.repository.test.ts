@@ -24,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
     },
     stockTransaction: {
-      create: vi.fn(),
+      createMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -126,15 +126,17 @@ describe('DispatchEntryRepository', () => {
       });
 
       expect(result).toEqual(expect.objectContaining({ id: 'entry-1' }));
-      expect(prisma.stockTransaction.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          productId: 'prod-1',
-          changeQty: -5,
-          stockBefore: 10,
-          stockAfter: 5,
-          reason: 'DISPATCH_ENTRY',
-          dispatchEntryId: 'entry-1',
-        }),
+      expect(prisma.stockTransaction.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            productId: 'prod-1',
+            changeQty: -5,
+            stockBefore: 10,
+            stockAfter: 5,
+            reason: 'DISPATCH_ENTRY',
+            dispatchEntryId: 'entry-1',
+          }),
+        ],
       });
       expect(prisma.product.update).toHaveBeenCalledWith({
         where: { id: 'prod-1' },
@@ -189,7 +191,7 @@ describe('DispatchEntryRepository', () => {
         })
       );
       expect(prisma.dispatchEntry.create).not.toHaveBeenCalled();
-      expect(prisma.stockTransaction.create).not.toHaveBeenCalled();
+      expect(prisma.stockTransaction.createMany).not.toHaveBeenCalled();
     });
 
     it('checks cumulative quantity when the same product appears in multiple lines', async () => {
@@ -213,11 +215,13 @@ describe('DispatchEntryRepository', () => {
   describe('cancelWithStockRestore', () => {
     it('marks the entry cancelled and restores stock for each item', async () => {
       vi.mocked(prisma.dispatchEntry.update).mockResolvedValue({} as never);
-      vi.mocked(prisma.product.findUnique).mockResolvedValue({
-        id: 'prod-1',
-        name: 'Ink Red',
-        currentStock: 5,
-      } as never);
+      vi.mocked(prisma.product.findMany).mockResolvedValue([
+        {
+          id: 'prod-1',
+          name: 'Ink Red',
+          currentStock: 5,
+        } as never,
+      ]);
 
       const result = await dispatchEntryRepository.cancelWithStockRestore('entry-1', [
         { productId: 'prod-1', quantity: 5 },
@@ -227,15 +231,17 @@ describe('DispatchEntryRepository', () => {
         where: { id: 'entry-1' },
         data: { isCancelled: true },
       });
-      expect(prisma.stockTransaction.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          productId: 'prod-1',
-          changeQty: 5,
-          stockBefore: 5,
-          stockAfter: 10,
-          reason: 'DISPATCH_ENTRY_CANCELLED',
-          dispatchEntryId: 'entry-1',
-        }),
+      expect(prisma.stockTransaction.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            productId: 'prod-1',
+            changeQty: 5,
+            stockBefore: 5,
+            stockAfter: 10,
+            reason: 'DISPATCH_ENTRY_CANCELLED',
+            dispatchEntryId: 'entry-1',
+          }),
+        ],
       });
       expect(prisma.product.update).toHaveBeenCalledWith({
         where: { id: 'prod-1' },

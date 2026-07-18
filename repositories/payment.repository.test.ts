@@ -12,14 +12,13 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       create: vi.fn(),
-      updateMany: vi.fn(),
+      update: vi.fn(),
     },
     invoice: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
-      updateMany: vi.fn(),
     },
     customer: {
       update: vi.fn(),
@@ -157,7 +156,7 @@ describe('PaymentRepository', () => {
       expect(result.replay).toBe(true);
       expect(result.created).toHaveLength(1);
       expect(result.updatedInvoices[0]).toMatchObject({ id: 'inv-1', paymentStatus: 'PAID' });
-      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+      expect(prisma.payment.update).not.toHaveBeenCalled();
     });
 
     it('fast-fails with INVOICE_CUSTOMER_MISMATCH and rolls back the batch', async () => {
@@ -202,7 +201,16 @@ describe('PaymentRepository', () => {
       } as never);
       vi.mocked(prisma.payment.findMany).mockResolvedValue([paymentRow] as never);
       vi.mocked(prisma.invoice.findMany).mockResolvedValue([invoiceRow] as never);
-      vi.mocked(prisma.payment.updateMany).mockResolvedValue({ count: 0 });
+      vi.mocked(prisma.payment.update).mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '6.19.3',
+        })
+      );
+      vi.mocked(prisma.invoice.update).mockResolvedValue({
+        ...invoiceRow,
+        paidAmount: new Prisma.Decimal(1000),
+      } as never);
 
       await expect(paymentRepository.allocateBatch(baseData)).rejects.toMatchObject({
         code: 'ALLOCATION_CONFLICT',
@@ -218,16 +226,19 @@ describe('PaymentRepository', () => {
       } as never);
       vi.mocked(prisma.payment.findMany).mockResolvedValue([paymentRow] as never);
       vi.mocked(prisma.invoice.findMany).mockResolvedValue([invoiceRow] as never);
-      vi.mocked(prisma.payment.updateMany).mockResolvedValue({ count: 1 });
-      vi.mocked(prisma.invoice.updateMany).mockResolvedValue({ count: 1 });
-      vi.mocked(prisma.invoice.findUniqueOrThrow).mockResolvedValue({
-        ...invoiceRow,
-        paidAmount: new Prisma.Decimal(1000),
-      } as never);
-      vi.mocked(prisma.payment.findUniqueOrThrow).mockResolvedValue({
+      vi.mocked(prisma.payment.update).mockResolvedValue({
         ...paymentRow,
         unallocatedAmount: new Prisma.Decimal(0),
       } as never);
+      vi.mocked(prisma.invoice.update).mockImplementation(((args: {
+        data: { paidAmount?: unknown; paymentStatus?: string };
+      }) => {
+        const { data } = args;
+        if (data.paidAmount) {
+          return Promise.resolve({ ...invoiceRow, paidAmount: new Prisma.Decimal(1000) });
+        }
+        return Promise.resolve({ ...invoiceRow, paidAmount: new Prisma.Decimal(1000), ...data });
+      }) as never);
       vi.mocked(prisma.paymentAllocation.create).mockResolvedValue({
         id: 'alloc-1',
         paymentId: 'pay-1',
@@ -239,11 +250,11 @@ describe('PaymentRepository', () => {
 
       const result = await paymentRepository.allocateBatch(baseData);
 
-      expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      expect(prisma.payment.update).toHaveBeenCalledWith({
         where: { id: 'pay-1', unallocatedAmount: { gte: 1000 } },
         data: { unallocatedAmount: { decrement: 1000 } },
       });
-      expect(prisma.invoice.updateMany).toHaveBeenCalledWith({
+      expect(prisma.invoice.update).toHaveBeenCalledWith({
         where: { id: 'inv-1', paidAmount: { lte: 0 } },
         data: { paidAmount: { increment: 1000 } },
       });
