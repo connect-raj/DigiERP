@@ -9,8 +9,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -60,6 +61,8 @@ model Product {
   purchaseItems      PurchaseItem[]
   dispatchEntryItems DispatchEntryItem[]
   invoiceItems       InvoiceItem[]
+
+  @@index([categoryId])
 }
 
 model Vendor {
@@ -88,6 +91,7 @@ model VendorProduct {
   product     Product @relation(fields: [productId], references: [id])
 
   @@unique([vendorId, productId])
+  @@index([productId])
 }
 
 model CustomerPrice {
@@ -101,6 +105,7 @@ model CustomerPrice {
   product    Product  @relation(fields: [productId], references: [id])
 
   @@unique([customerId, productId])
+  @@index([productId])
 }
 
 model PriceHistory {
@@ -113,6 +118,9 @@ model PriceHistory {
 
   customer Customer @relation(fields: [customerId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([customerId])
+  @@index([productId])
 }
 
 model Settings {
@@ -140,6 +148,11 @@ model StockTransaction {
   purchase        Purchase?      @relation(fields: [purchaseId], references: [id])
   dispatchEntry   DispatchEntry? @relation(fields: [dispatchEntryId], references: [id])
   performedBy     User?          @relation(fields: [performedById], references: [id])
+
+  @@index([productId])
+  @@index([purchaseId])
+  @@index([dispatchEntryId])
+  @@index([performedById])
 }
 
 model Customer {
@@ -185,6 +198,11 @@ model DispatchEntry {
   items     DispatchEntryItem[]
   invoice   Invoice?
   stockTxns StockTransaction[]
+
+  @@index([customerId])
+  @@index([date])
+  @@index([status])
+  @@index([isCancelled])
 }
 
 model DispatchEntryItem {
@@ -197,6 +215,9 @@ model DispatchEntryItem {
 
   dispatchEntry DispatchEntry @relation(fields: [dispatchEntryId], references: [id])
   product       Product       @relation(fields: [productId], references: [id])
+
+  @@index([dispatchEntryId])
+  @@index([productId])
 }
 
 model Invoice {
@@ -221,6 +242,10 @@ model Invoice {
   customer           Customer            @relation(fields: [customerId], references: [id])
   items              InvoiceItem[]
   paymentAllocations PaymentAllocation[]
+
+  @@index([customerId])
+  @@index([date])
+  @@index([paymentStatus])
 }
 
 model InvoiceItem {
@@ -236,6 +261,9 @@ model InvoiceItem {
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
 }
 
 enum DocStatus {
@@ -263,6 +291,11 @@ model Purchase {
   items          PurchaseItem[]
   vendorPayments VendorPayment[]
   stockTxns      StockTransaction[]
+
+  @@index([vendorId])
+  @@index([date])
+  @@index([paymentStatus])
+  @@index([isCancelled])
 }
 
 model PurchaseItem {
@@ -278,6 +311,9 @@ model PurchaseItem {
 
   purchase Purchase @relation(fields: [purchaseId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@index([productId])
 }
 
 model VendorPayment {
@@ -294,6 +330,9 @@ model VendorPayment {
   vendor     Vendor    @relation(fields: [vendorId], references: [id])
   purchase   Purchase? @relation(fields: [purchaseId], references: [id])
   recordedBy User?     @relation(fields: [recordedById], references: [id])
+
+  @@index([vendorId])
+  @@index([purchaseId])
 }
 
 model Payment {
@@ -310,6 +349,10 @@ model Payment {
   customer    Customer            @relation(fields: [customerId], references: [id])
   recordedBy  User?               @relation(fields: [recordedById], references: [id])
   allocations PaymentAllocation[]
+
+  @@index([customerId])
+  @@index([date])
+  @@index([mode])
 }
 
 model AllocationBatch {
@@ -331,6 +374,10 @@ model PaymentAllocation {
   payment Payment         @relation(fields: [paymentId], references: [id])
   invoice Invoice         @relation(fields: [invoiceId], references: [id])
   batch   AllocationBatch @relation(fields: [batchId], references: [id])
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([batchId])
 }
 
 enum PaymentStatus {

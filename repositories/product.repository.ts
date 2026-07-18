@@ -27,10 +27,7 @@ export class ProductRepository {
       prisma.product.findMany({
         where,
         include: {
-          category: true,
-          vendorProducts: {
-            include: { vendor: true },
-          },
+          category: { select: { name: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -46,9 +43,13 @@ export class ProductRepository {
     return prisma.product.findUnique({
       where: { id },
       include: {
-        category: true,
+        category: { select: { name: true } },
         vendorProducts: {
-          include: { vendor: true },
+          select: {
+            id: true,
+            isPreferred: true,
+            vendor: { select: { id: true, name: true } },
+          },
         },
         stockTxns: {
           orderBy: { createdAt: 'desc' },

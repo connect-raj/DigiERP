@@ -254,63 +254,75 @@ export class PaymentRepository {
           const invoice = invoiceMap.get(allocation.invoiceId)!;
           const maxAllowedPaidAmount = Number(invoice.totalAmount) - allocation.amount;
 
-          const paymentUpdate = await tx.payment.updateMany({
-            where: { id: allocation.paymentId, unallocatedAmount: { gte: allocation.amount } },
-            data: { unallocatedAmount: { decrement: allocation.amount } },
-          });
-          if (paymentUpdate.count === 0) {
-            throw new ConflictError(
-              "Payment's available balance changed before the allocation could be applied; refetch and retry",
-              'ALLOCATION_CONFLICT',
-              [{ ...allocation, index, reason: 'PAYMENT_BALANCE_INSUFFICIENT' }]
-            );
+          // payment and invoice guarded updates touch different rows — safe to run concurrently
+          const [paymentResult, invoiceResult] = await Promise.allSettled([
+            tx.payment.update({
+              where: { id: allocation.paymentId, unallocatedAmount: { gte: allocation.amount } },
+              data: { unallocatedAmount: { decrement: allocation.amount } },
+            }),
+            tx.invoice.update({
+              where: { id: allocation.invoiceId, paidAmount: { lte: maxAllowedPaidAmount } },
+              data: { paidAmount: { increment: allocation.amount } },
+            }),
+          ]);
+
+          if (paymentResult.status === 'rejected') {
+            if (
+              paymentResult.reason instanceof Prisma.PrismaClientKnownRequestError &&
+              paymentResult.reason.code === 'P2025'
+            ) {
+              throw new ConflictError(
+                "Payment's available balance changed before the allocation could be applied; refetch and retry",
+                'ALLOCATION_CONFLICT',
+                [{ ...allocation, index, reason: 'PAYMENT_BALANCE_INSUFFICIENT' }]
+              );
+            }
+            throw paymentResult.reason;
+          }
+          if (invoiceResult.status === 'rejected') {
+            if (
+              invoiceResult.reason instanceof Prisma.PrismaClientKnownRequestError &&
+              invoiceResult.reason.code === 'P2025'
+            ) {
+              throw new ConflictError(
+                "Invoice's outstanding balance changed before the allocation could be applied; refetch and retry",
+                'ALLOCATION_CONFLICT',
+                [{ ...allocation, index, reason: 'INVOICE_BALANCE_INSUFFICIENT' }]
+              );
+            }
+            throw invoiceResult.reason;
           }
 
-          const invoiceUpdate = await tx.invoice.updateMany({
-            where: { id: allocation.invoiceId, paidAmount: { lte: maxAllowedPaidAmount } },
-            data: { paidAmount: { increment: allocation.amount } },
-          });
-          if (invoiceUpdate.count === 0) {
-            throw new ConflictError(
-              "Invoice's outstanding balance changed before the allocation could be applied; refetch and retry",
-              'ALLOCATION_CONFLICT',
-              [{ ...allocation, index, reason: 'INVOICE_BALANCE_INSUFFICIENT' }]
-            );
-          }
+          const updatedPaymentRow = paymentResult.value;
+          const updatedInvoiceRow = invoiceResult.value;
 
-          const updatedInvoiceRow = await tx.invoice.findUniqueOrThrow({
-            where: { id: allocation.invoiceId },
-          });
           const newPaidAmount = Number(updatedInvoiceRow.paidAmount);
           const totalAmount = Number(invoice.totalAmount);
           const paymentStatus: PaymentStatus =
             newPaidAmount <= 0 ? 'UNPAID' : newPaidAmount >= totalAmount ? 'PAID' : 'PARTIAL';
 
-          await tx.invoice.update({
-            where: { id: allocation.invoiceId },
-            data: { paymentStatus },
-          });
-
-          const allocationRow = await tx.paymentAllocation.create({
-            data: {
-              paymentId: allocation.paymentId,
-              invoiceId: allocation.invoiceId,
-              batchId: batch.id,
-              amount: allocation.amount,
-            },
-          });
-
-          const updatedPaymentRow = await tx.payment.findUniqueOrThrow({
-            where: { id: allocation.paymentId },
-          });
-
-          await tx.customer.update({
-            where: { id: invoice.customerId },
-            data: {
-              outstandingBalance: { decrement: allocation.amount },
-              creditBalance: { decrement: allocation.amount },
-            },
-          });
+          // status update, allocation record, and customer balance touch three different rows
+          const [, allocationRow] = await Promise.all([
+            tx.invoice.update({
+              where: { id: allocation.invoiceId },
+              data: { paymentStatus },
+            }),
+            tx.paymentAllocation.create({
+              data: {
+                paymentId: allocation.paymentId,
+                invoiceId: allocation.invoiceId,
+                batchId: batch.id,
+                amount: allocation.amount,
+              },
+            }),
+            tx.customer.update({
+              where: { id: invoice.customerId },
+              data: {
+                outstandingBalance: { decrement: allocation.amount },
+                creditBalance: { decrement: allocation.amount },
+              },
+            }),
+          ]);
 
           created.push({
             id: allocationRow.id,

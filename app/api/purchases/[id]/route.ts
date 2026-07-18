@@ -10,18 +10,17 @@ export const GET = asyncHandler(
     const purchase = await prisma.purchase.findUnique({
       where: { id: id },
       include: {
-        vendor: true,
+        vendor: { select: { name: true, phone: true, email: true, address: true } },
         items: {
           include: {
             product: {
-              include: { category: true },
+              select: { name: true, unit: true, category: { select: { hsnCode: true, gstRate: true } } },
             },
           },
         },
-        vendorPayments: true,
         stockTxns: {
           include: {
-            product: true,
+            product: { select: { name: true } },
           },
         },
       },
@@ -92,11 +91,14 @@ export const DELETE = asyncHandler(
         data: { isCancelled: true },
       });
 
+      const freshProducts = await tx.product.findMany({ where: { id: { in: productIds } } });
+      const runningStock = new Map(freshProducts.map((p) => [p.id, Number(p.currentStock)]));
+
       const stockReversed = [];
+      const stockTxnData = [];
 
       for (const { item, product } of reversedItems) {
-        const freshProduct = await tx.product.findUnique({ where: { id: product.id } });
-        const freshStock = Number(freshProduct!.currentStock);
+        const freshStock = runningStock.get(product.id)!;
         const itemQty = Number(item.quantity);
 
         if (freshStock - itemQty < 0) {
@@ -104,24 +106,24 @@ export const DELETE = asyncHandler(
         }
 
         const stockAfter = freshStock - itemQty;
+        runningStock.set(product.id, stockAfter);
 
-        await tx.stockTransaction.create({
-          data: {
-            productId: product.id,
-            changeQty: -itemQty,
-            stockBefore: freshStock,
-            stockAfter,
-            reason: 'PURCHASE_CANCELLED',
-            purchaseId: purchase.id,
-          },
-        });
-
-        await tx.product.update({
-          where: { id: product.id },
-          data: { currentStock: stockAfter },
+        stockTxnData.push({
+          productId: product.id,
+          changeQty: -itemQty,
+          stockBefore: freshStock,
+          stockAfter,
+          reason: 'PURCHASE_CANCELLED',
+          purchaseId: purchase.id,
         });
 
         stockReversed.push({ productId: product.id, qty: item.quantity });
+      }
+
+      await tx.stockTransaction.createMany({ data: stockTxnData });
+
+      for (const [productId, finalStock] of runningStock) {
+        await tx.product.update({ where: { id: productId }, data: { currentStock: finalStock } });
       }
 
       return { success: true, stockReversed };

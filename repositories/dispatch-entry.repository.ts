@@ -79,12 +79,12 @@ export class DispatchEntryRepository {
         customer: { select: { id: true, firmName: true, state: true, gstin: true } },
         items: {
           include: {
-            product: { include: { category: true } },
+            product: { select: { name: true, category: { select: { name: true } } } },
           },
         },
-        invoice: true,
+        invoice: { select: { id: true, invoiceNo: true, date: true, paymentStatus: true } },
         stockTxns: {
-          include: { product: true },
+          include: { product: { select: { name: true } } },
         },
       },
     });
@@ -169,22 +169,22 @@ export class DispatchEntryRepository {
       });
 
       const runningStock = new Map(stockMap);
-      for (const item of data.items) {
+      const stockTxnData = data.items.map((item) => {
         const stockBefore = runningStock.get(item.productId)!;
         const stockAfter = stockBefore - item.quantity;
         runningStock.set(item.productId, stockAfter);
 
-        await tx.stockTransaction.create({
-          data: {
-            productId: item.productId,
-            changeQty: -item.quantity,
-            stockBefore,
-            stockAfter,
-            reason: 'DISPATCH_ENTRY',
-            dispatchEntryId: dispatchEntry.id,
-          },
-        });
-      }
+        return {
+          productId: item.productId,
+          changeQty: -item.quantity,
+          stockBefore,
+          stockAfter,
+          reason: 'DISPATCH_ENTRY',
+          dispatchEntryId: dispatchEntry.id,
+        };
+      });
+
+      await tx.stockTransaction.createMany({ data: stockTxnData });
 
       for (const [productId, finalStock] of runningStock) {
         await tx.product.update({ where: { id: productId }, data: { currentStock: finalStock } });
@@ -204,33 +204,38 @@ export class DispatchEntryRepository {
         data: { isCancelled: true },
       });
 
+      const productIds = [...new Set(items.map((item) => item.productId))];
+      const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+      const productMap = new Map(products.map((p) => [p.id, p]));
+
       const restored: StockRestoreItem[] = [];
-      for (const item of items) {
-        const product = await tx.product.findUnique({ where: { id: item.productId } });
-        const stockBefore = Number(product!.currentStock);
+      const runningStock = new Map(products.map((p) => [p.id, Number(p.currentStock)]));
+      const stockTxnData = items.map((item) => {
+        const product = productMap.get(item.productId)!;
+        const stockBefore = runningStock.get(item.productId)!;
         const stockAfter = stockBefore + item.quantity;
-
-        await tx.stockTransaction.create({
-          data: {
-            productId: item.productId,
-            changeQty: item.quantity,
-            stockBefore,
-            stockAfter,
-            reason: 'DISPATCH_ENTRY_CANCELLED',
-            dispatchEntryId: id,
-          },
-        });
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { currentStock: stockAfter },
-        });
+        runningStock.set(item.productId, stockAfter);
 
         restored.push({
           productId: item.productId,
-          productName: product!.name,
+          productName: product.name,
           qty: item.quantity,
         });
+
+        return {
+          productId: item.productId,
+          changeQty: item.quantity,
+          stockBefore,
+          stockAfter,
+          reason: 'DISPATCH_ENTRY_CANCELLED',
+          dispatchEntryId: id,
+        };
+      });
+
+      await tx.stockTransaction.createMany({ data: stockTxnData });
+
+      for (const [productId, finalStock] of runningStock) {
+        await tx.product.update({ where: { id: productId }, data: { currentStock: finalStock } });
       }
 
       return restored;

@@ -11,5 +11,9 @@ export default defineConfig({
   engine: 'classic',
   datasource: {
     url: env('DATABASE_URL'),
+    // Falls back to DATABASE_URL when DIRECT_URL isn't set in this environment (e.g. Preview
+    // deploys, which never run migrate commands anyway) -- env() throws unconditionally for any
+    // Prisma CLI invocation, including `prisma generate`, which doesn't need directUrl at all.
+    directUrl: process.env.DIRECT_URL ?? env('DATABASE_URL'),
   },
 });

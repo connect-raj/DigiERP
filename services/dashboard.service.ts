@@ -6,10 +6,8 @@ const TOP_CATEGORY_LIMIT = 5;
 const RECENT_ACTIVITY_LIMIT = 15;
 
 type InvoiceRow = Awaited<ReturnType<typeof dashboardRepository.findInvoicesInRange>>[number];
-type PaymentRow = Awaited<ReturnType<typeof dashboardRepository.findPaymentsInRange>>[number];
-type PurchaseRow = Awaited<ReturnType<typeof dashboardRepository.findPurchasesInRange>>[number];
-type InvoiceItemRow = Awaited<
-  ReturnType<typeof dashboardRepository.findInvoiceItemsInRange>
+type VendorPayableRow = Awaited<
+  ReturnType<typeof dashboardRepository.findVendorPayablesInRange>
 >[number];
 type ProductRow = Awaited<ReturnType<typeof dashboardRepository.findActiveProducts>>[number];
 type CustomerRow = Awaited<ReturnType<typeof dashboardRepository.findAllCustomers>>[number];
@@ -34,12 +32,12 @@ export class DashboardService {
     const financialYearStartMonth = settings?.financialYearStart ?? 4;
     const range = getPeriodRange(period, new Date(), financialYearStartMonth);
 
-    const [invoices, payments, purchases, invoiceItems, products, customers, recentActivity] =
+    const [invoices, collected, vendorPayables, topCategorySales, products, customers, recentActivity] =
       await Promise.all([
         dashboardRepository.findInvoicesInRange(range),
-        dashboardRepository.findPaymentsInRange(range),
-        dashboardRepository.findPurchasesInRange(range),
-        dashboardRepository.findInvoiceItemsInRange(range),
+        dashboardRepository.sumPaymentsInRange(range),
+        dashboardRepository.findVendorPayablesInRange(range),
+        dashboardRepository.findTopCategorySalesInRange(range),
         dashboardRepository.findActiveProducts(),
         dashboardRepository.findAllCustomers(),
         this.getRecentActivity(),
@@ -48,44 +46,32 @@ export class DashboardService {
     return {
       period,
       periodRange: { start: range.start.toISOString(), end: range.end.toISOString() },
-      revenue: this.buildRevenue(invoices, payments),
-      vendorPayables: this.buildVendorPayables(purchases),
+      revenue: this.buildRevenue(invoices, collected),
+      vendorPayables: this.buildVendorPayables(vendorPayables),
       salesChart: this.buildSalesChart(period, invoices),
-      topCategoryChart: this.buildTopCategoryChart(invoiceItems),
+      topCategoryChart: topCategorySales.slice(0, TOP_CATEGORY_LIMIT),
       lowStock: this.buildLowStock(products),
       creditHealth: this.buildCreditHealth(customers),
       recentActivity,
     };
   }
 
-  private buildRevenue(invoices: InvoiceRow[], payments: PaymentRow[]) {
+  private buildRevenue(invoices: InvoiceRow[], collected: number) {
     return {
       invoiced: invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0),
-      collected: payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+      collected,
     };
   }
 
-  private buildVendorPayables(purchases: PurchaseRow[]) {
-    const byVendor = new Map<string, { vendorId: string; vendorName: string; amountDue: number }>();
+  private buildVendorPayables(vendorPayables: VendorPayableRow[]) {
     let total = 0;
-
-    for (const purchase of purchases) {
-      const amountDue = Number(purchase.totalAmount) - Number(purchase.paidAmount);
+    const withAmountDue = vendorPayables.map((v) => {
+      const amountDue = v.totalAmount - v.paidAmount;
       total += amountDue;
+      return { vendorId: v.vendorId, vendorName: v.vendorName, amountDue };
+    });
 
-      const existing = byVendor.get(purchase.vendor.id);
-      if (existing) {
-        existing.amountDue += amountDue;
-      } else {
-        byVendor.set(purchase.vendor.id, {
-          vendorId: purchase.vendor.id,
-          vendorName: purchase.vendor.name,
-          amountDue,
-        });
-      }
-    }
-
-    const topPendingVendors = [...byVendor.values()]
+    const topPendingVendors = withAmountDue
       .filter((vendor) => vendor.amountDue > 0)
       .sort((a, b) => b.amountDue - a.amountDue)
       .slice(0, TOP_PENDING_VENDORS_LIMIT);
@@ -106,28 +92,6 @@ export class DashboardService {
     return [...buckets.entries()]
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([label, amount]) => ({ label, amount }));
-  }
-
-  private buildTopCategoryChart(items: InvoiceItemRow[]) {
-    const byCategory = new Map<
-      string,
-      { categoryId: string; categoryName: string; amount: number }
-    >();
-
-    for (const item of items) {
-      const { id, name } = item.product.category;
-      const amount = Number(item.lineTotal);
-      const existing = byCategory.get(id);
-      if (existing) {
-        existing.amount += amount;
-      } else {
-        byCategory.set(id, { categoryId: id, categoryName: name, amount });
-      }
-    }
-
-    return [...byCategory.values()]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, TOP_CATEGORY_LIMIT);
   }
 
   private buildLowStock(products: ProductRow[]) {

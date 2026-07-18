@@ -6,10 +6,11 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     settings: { findFirst: vi.fn() },
     invoice: { findMany: vi.fn() },
-    payment: { findMany: vi.fn() },
-    purchase: { findMany: vi.fn() },
-    invoiceItem: { findMany: vi.fn() },
+    payment: { findMany: vi.fn(), aggregate: vi.fn() },
+    purchase: { findMany: vi.fn(), groupBy: vi.fn() },
+    invoiceItem: { findMany: vi.fn(), groupBy: vi.fn() },
     product: { findMany: vi.fn() },
+    vendor: { findMany: vi.fn() },
     customer: { findMany: vi.fn() },
     dispatchEntry: { findMany: vi.fn() },
   },
@@ -36,34 +37,56 @@ describe('DashboardRepository', () => {
     );
   });
 
-  it('findPaymentsInRange filters by the given date range', async () => {
-    vi.mocked(prisma.payment.findMany).mockResolvedValue([]);
-    await dashboardRepository.findPaymentsInRange(range);
-    expect(prisma.payment.findMany).toHaveBeenCalledWith(
+  it('sumPaymentsInRange aggregates the amount sum for the given date range', async () => {
+    vi.mocked(prisma.payment.aggregate).mockResolvedValue({ _sum: { amount: 500 } } as never);
+    const result = await dashboardRepository.sumPaymentsInRange(range);
+    expect(prisma.payment.aggregate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { date: { gte: range.start, lt: range.end } },
+        _sum: { amount: true },
       })
     );
+    expect(result).toBe(500);
   });
 
-  it('findPurchasesInRange excludes cancelled purchases', async () => {
-    vi.mocked(prisma.purchase.findMany).mockResolvedValue([]);
-    await dashboardRepository.findPurchasesInRange(range);
-    expect(prisma.purchase.findMany).toHaveBeenCalledWith(
+  it('findVendorPayablesInRange groups purchases by vendor, excluding cancelled ones', async () => {
+    vi.mocked(prisma.purchase.groupBy).mockResolvedValue([
+      { vendorId: 'v1', _sum: { totalAmount: 100, paidAmount: 40 } },
+    ] as never);
+    vi.mocked(prisma.vendor.findMany).mockResolvedValue([{ id: 'v1', name: 'Vendor One' }] as never);
+
+    const result = await dashboardRepository.findVendorPayablesInRange(range);
+
+    expect(prisma.purchase.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
+        by: ['vendorId'],
         where: { date: { gte: range.start, lt: range.end }, isCancelled: false },
+        _sum: { totalAmount: true, paidAmount: true },
       })
     );
+    expect(result).toEqual([
+      { vendorId: 'v1', vendorName: 'Vendor One', totalAmount: 100, paidAmount: 40 },
+    ]);
   });
 
-  it('findInvoiceItemsInRange filters via the parent invoice date', async () => {
-    vi.mocked(prisma.invoiceItem.findMany).mockResolvedValue([]);
-    await dashboardRepository.findInvoiceItemsInRange(range);
-    expect(prisma.invoiceItem.findMany).toHaveBeenCalledWith(
+  it('findTopCategorySalesInRange groups invoice items by product, via the parent invoice date', async () => {
+    vi.mocked(prisma.invoiceItem.groupBy).mockResolvedValue([
+      { productId: 'p1', _sum: { lineTotal: 250 } },
+    ] as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      { id: 'p1', category: { id: 'c1', name: 'Category One' } },
+    ] as never);
+
+    const result = await dashboardRepository.findTopCategorySalesInRange(range);
+
+    expect(prisma.invoiceItem.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
+        by: ['productId'],
         where: { invoice: { date: { gte: range.start, lt: range.end } } },
+        _sum: { lineTotal: true },
       })
     );
+    expect(result).toEqual([{ categoryId: 'c1', categoryName: 'Category One', amount: 250 }]);
   });
 
   it('findActiveProducts only returns active products and includes category', async () => {

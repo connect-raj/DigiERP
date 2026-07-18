@@ -36,9 +36,12 @@ export class VendorRepository {
       where: { id },
       include: {
         vendorProducts: {
-          include: {
+          select: {
+            id: true,
+            productId: true,
+            isPreferred: true,
             product: {
-              include: { category: true },
+              select: { id: true, name: true, category: { select: { name: true } } },
             },
           },
         },
@@ -78,23 +81,23 @@ export class VendorRepository {
         });
       }
 
-      let count = 0;
-      for (const product of products) {
-        await tx.vendorProduct.upsert({
-          where: { vendorId_productId: { vendorId, productId: product.productId } },
-          create: {
-            vendorId,
-            productId: product.productId,
-            isPreferred: product.isPreferred ?? false,
-          },
-          update: {
-            isPreferred: product.isPreferred ?? false,
-          },
-        });
-        count++;
-      }
+      await Promise.all(
+        products.map((product) =>
+          tx.vendorProduct.upsert({
+            where: { vendorId_productId: { vendorId, productId: product.productId } },
+            create: {
+              vendorId,
+              productId: product.productId,
+              isPreferred: product.isPreferred ?? false,
+            },
+            update: {
+              isPreferred: product.isPreferred ?? false,
+            },
+          })
+        )
+      );
 
-      return count;
+      return products.length;
     });
   }
 
