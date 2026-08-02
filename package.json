@@ -19,8 +19,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "db:generate": "prisma generate",
-    "db:seed:fy2026-27": "tsx prisma/migration-seeds/fy2026-27.ts"
+    "db:generate": "prisma generate"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
