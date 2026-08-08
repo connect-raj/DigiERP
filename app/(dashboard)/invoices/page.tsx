@@ -16,7 +16,7 @@ type Invoice = {
   totalCgst: string | number;
   totalSgst: string | number;
   totalIgst: string | number;
-  paidAmount: string | number;
+  balanceDue: string | number;
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
 };
 

@@ -12,8 +12,9 @@ export type Customer = {
   gstin?: string | null;
   phone?: string | null;
   email?: string | null;
-  outstandingBalance: string | number;
-  creditBalance: string | number;
+  billingMode?: 'BILL_WISE' | 'OPEN_BALANCE';
+  // derived: positive = owed by customer, negative = on-account credit
+  pendingTotal?: string | number;
   creditLimit: string | number;
 };
 
@@ -187,25 +188,29 @@ export default function CustomerFormDrawer({
           id="customer-form"
         >
           <div className="flex-1 space-y-6 p-6">
-            {editingCustomer && (
-              <div className="bg-surface-container-lowest border-outline-variant rounded border-[0.5px] p-4">
-                <p className="text-body-md text-on-surface-variant">
-                  Outstanding Balance:{' '}
-                  <span className="font-bold text-amber-400">
-                    {formatINR(editingCustomer.outstandingBalance)}
-                  </span>
-                </p>
-                <p className="text-body-md text-on-surface-variant mt-1">
-                  Available Credit:{' '}
-                  <span className="text-secondary font-bold">
-                    {formatINR(editingCustomer.creditBalance)}
-                  </span>
-                </p>
-                <p className="text-on-surface-variant mt-1 text-[12px] opacity-70">
-                  Updated automatically from invoices and payments — not editable here.
-                </p>
-              </div>
-            )}
+            {editingCustomer &&
+              (() => {
+                const pending = Number(editingCustomer.pendingTotal ?? 0);
+                return (
+                  <div className="bg-surface-container-lowest border-outline-variant rounded border-[0.5px] p-4">
+                    <p className="text-body-md text-on-surface-variant">
+                      Outstanding Balance:{' '}
+                      <span className="font-bold text-amber-400">
+                        {formatINR(Math.max(0, pending))}
+                      </span>
+                    </p>
+                    <p className="text-body-md text-on-surface-variant mt-1">
+                      On-Account Credit:{' '}
+                      <span className="text-secondary font-bold">
+                        {formatINR(Math.max(0, -pending))}
+                      </span>
+                    </p>
+                    <p className="text-on-surface-variant mt-1 text-[12px] opacity-70">
+                      Derived live from invoices and payments — not editable here.
+                    </p>
+                  </div>
+                );
+              })()}
 
             {submitError && (
               <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-red-400">

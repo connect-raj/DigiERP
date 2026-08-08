@@ -50,9 +50,10 @@ type Invoice = {
 type Payment = {
   id: string;
   amount: string | number;
-  unallocatedAmount: string | number;
+  onAccount: string | number;
   mode: string;
   reference: string | null;
+  status?: 'ACTIVE' | 'VOID';
   date: string;
 };
 
@@ -105,6 +106,69 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [savingPrice, setSavingPrice] = useState(false);
   const [addingPrice, setAddingPrice] = useState(false);
   const [newPriceProductId, setNewPriceProductId] = useState('');
+
+  const [savingBillingMode, setSavingBillingMode] = useState(false);
+  const [openingBalanceInput, setOpeningBalanceInput] = useState('');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState('');
+  const [savingOpeningBalance, setSavingOpeningBalance] = useState(false);
+
+  const updateBillingMode = async (mode: 'BILL_WISE' | 'OPEN_BALANCE') => {
+    try {
+      setSavingBillingMode(true);
+      const res = await fetch(`/api/customers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingMode: mode }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to update billing mode');
+        return;
+      }
+      fetchData();
+    } catch (err) {
+      console.error('Failed to update billing mode', err);
+      window.alert('Failed to update billing mode');
+    } finally {
+      setSavingBillingMode(false);
+    }
+  };
+
+  const saveOpeningBalance = async () => {
+    const parsed = Number(openingBalanceInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      window.alert('Enter a valid non-negative opening balance.');
+      return;
+    }
+    if (!openingBalanceDate) {
+      window.alert('Pick an as-of date for the opening balance.');
+      return;
+    }
+    try {
+      setSavingOpeningBalance(true);
+      const res = await fetch(`/api/customers/${id}/opening-balance`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          totalAmount: parsed,
+          asOfDate: new Date(openingBalanceDate).toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to set opening balance');
+        return;
+      }
+      setOpeningBalanceInput('');
+      setOpeningBalanceDate('');
+      fetchData();
+    } catch (err) {
+      console.error('Failed to set opening balance', err);
+      window.alert('Failed to set opening balance');
+    } finally {
+      setSavingOpeningBalance(false);
+    }
+  };
 
   const savePrice = async (productId: string) => {
     const parsed = Number(priceInput);
@@ -231,7 +295,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const outstanding = Number(customer.outstandingBalance);
+  // pendingTotal is derived: positive = owed by customer, negative = on-account credit
+  const pendingTotal = Number(customer.pendingTotal ?? 0);
+  const outstanding = Math.max(0, pendingTotal);
+  const creditBalance = Math.max(0, -pendingTotal);
   const limit = Number(customer.creditLimit);
   const utilization = limit > 0 ? Math.min((outstanding / limit) * 100, 100) : 0;
 
@@ -253,6 +320,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href={`/customers/${id}/ledger`}
+            className="border-outline-variant text-on-surface hover:bg-surface-container-high font-body-md flex items-center gap-2 rounded-lg border-[0.5px] px-4 py-2 font-medium transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">description</span>
+            Statement
+          </Link>
           <button
             onClick={() => setIsAllocateModalOpen(true)}
             className="border-outline-variant text-on-surface hover:bg-surface-container-high font-body-md flex items-center gap-2 rounded-lg border-[0.5px] px-4 py-2 font-medium transition-colors"
@@ -632,9 +706,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       <span className="font-data-tabular text-primary font-semibold">
                         {formatINR(payment.amount)}
                       </span>
-                      {Number(payment.unallocatedAmount) > 0 && (
+                      {Number(payment.onAccount) > 0 && (
                         <span className="rounded-full bg-amber-400/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-400 uppercase">
-                          {formatINR(payment.unallocatedAmount)} unallocated
+                          {formatINR(payment.onAccount)} on account
                         </span>
                       )}
                     </div>
@@ -683,9 +757,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 </span>
               </div>
               <div className="flex items-center justify-between text-[14px]">
-                <span className="text-on-surface-variant">Available Credit</span>
+                <span className="text-on-surface-variant">On-Account Credit</span>
                 <span className="font-data-tabular text-secondary font-semibold">
-                  {formatINR(customer.creditBalance)}
+                  {formatINR(creditBalance)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-[14px]">
@@ -703,6 +777,70 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               {outstanding > limit && limit > 0 && (
                 <p className="text-error text-[12px]">Outstanding balance exceeds credit limit.</p>
               )}
+            </div>
+          </div>
+
+          {/* Billing Mode & Opening Balance */}
+          <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-6">
+            <h2 className="font-title-md text-title-md text-primary mb-5">Billing</h2>
+
+            <div className="mb-5">
+              <p className="text-on-surface-variant mb-2 text-[13px]">Billing Mode</p>
+              <div className="border-outline-variant flex overflow-hidden rounded-lg border-[0.5px]">
+                {(['BILL_WISE', 'OPEN_BALANCE'] as const).map((mode) => {
+                  const active = (customer.billingMode ?? 'BILL_WISE') === mode;
+                  return (
+                    <button
+                      key={mode}
+                      disabled={savingBillingMode || active}
+                      onClick={() => updateBillingMode(mode)}
+                      className={`flex-1 px-3 py-2 text-[12px] font-semibold transition-colors ${
+                        active
+                          ? 'bg-secondary text-on-secondary'
+                          : 'text-on-surface-variant hover:bg-surface-container-high'
+                      }`}
+                    >
+                      {mode === 'BILL_WISE' ? 'Bill-wise' : 'Open Balance'}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-on-surface-variant mt-2 text-[11px]">
+                Controls the default payment-entry view only. Balances are computed the same way for
+                both modes.
+              </p>
+            </div>
+
+            <div>
+              <p className="text-on-surface-variant mb-2 text-[13px]">Set Opening Balance</p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={openingBalanceInput}
+                  onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                  placeholder="Amount (e.g. historical pending)"
+                  className="bg-surface-container-lowest border-outline-variant text-body-sm rounded-lg border-[0.5px] px-3 py-2"
+                />
+                <input
+                  type="date"
+                  value={openingBalanceDate}
+                  onChange={(e) => setOpeningBalanceDate(e.target.value)}
+                  className="bg-surface-container-lowest border-outline-variant text-body-sm rounded-lg border-[0.5px] px-3 py-2"
+                />
+                <button
+                  disabled={savingOpeningBalance}
+                  onClick={saveOpeningBalance}
+                  className="bg-primary text-on-primary rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
+                >
+                  {savingOpeningBalance ? 'Saving…' : 'Save Opening Balance'}
+                </button>
+              </div>
+              <p className="text-on-surface-variant mt-2 text-[11px]">
+                One-time entry for pending balance carried over from before this system. Editable
+                later; folds into the running balance.
+              </p>
             </div>
           </div>
         </div>

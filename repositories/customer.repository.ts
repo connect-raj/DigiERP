@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, RecordStatus } from '@prisma/client';
+import { getInvoiceBalance, getCustomerPendingTotal } from '@/lib/balance';
 import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
 
 export class CustomerRepository {
@@ -16,21 +17,39 @@ export class CustomerRepository {
       }),
     };
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       prisma.customer.findMany({
         where,
         orderBy: { firmName: 'asc' },
         skip,
         take,
+        include: {
+          invoices: { select: { totalAmount: true, status: true } },
+          payments: { select: { amount: true, status: true } },
+        },
       }),
       prisma.customer.count({ where }),
     ]);
+
+    const data = rows.map(({ invoices, payments, ...rest }) => ({
+      ...rest,
+      pendingTotal: getCustomerPendingTotal({ invoices, payments }),
+    }));
 
     return { data, total };
   }
 
   async findById(id: string) {
-    return prisma.customer.findUnique({ where: { id } });
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      include: {
+        invoices: { select: { totalAmount: true, status: true } },
+        payments: { select: { amount: true, status: true } },
+      },
+    });
+    if (!customer) return null;
+    const { invoices, payments, ...rest } = customer;
+    return { ...rest, pendingTotal: getCustomerPendingTotal({ invoices, payments }) };
   }
 
   async create(data: CreateCustomerInput) {
@@ -57,12 +76,43 @@ export class CustomerRepository {
     return prisma.customer.update({ where: { id }, data: { isActive: false } });
   }
 
-  /** Any invoice not fully paid keeps the customer financially active. */
+  /** Any ACTIVE invoice with a derived balanceDue > 0 keeps the customer financially active. */
   async hasUnpaidInvoices(id: string): Promise<boolean> {
-    const count = await prisma.invoice.count({
-      where: { customerId: id, paymentStatus: { not: 'PAID' } },
+    const invoices = await prisma.invoice.findMany({
+      where: { customerId: id, status: RecordStatus.ACTIVE },
+      select: {
+        totalAmount: true,
+        paymentAllocations: {
+          where: { payment: { status: RecordStatus.ACTIVE } },
+          select: { amount: true },
+        },
+      },
     });
-    return count > 0;
+    return invoices.some((inv) => {
+      const balanceDue = getInvoiceBalance(
+        inv.totalAmount,
+        inv.paymentAllocations.map((a) => ({
+          amount: a.amount,
+          paymentStatus: RecordStatus.ACTIVE,
+        }))
+      );
+      return balanceDue > 0.005;
+    });
+  }
+
+  /** Derived running balance: SUM(ACTIVE invoice totals) − SUM(ACTIVE payment amounts). */
+  async getPendingTotal(id: string): Promise<number> {
+    const [invoices, payments] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { customerId: id },
+        select: { totalAmount: true, status: true },
+      }),
+      prisma.payment.findMany({
+        where: { customerId: id },
+        select: { amount: true, status: true },
+      }),
+    ]);
+    return getCustomerPendingTotal({ invoices, payments });
   }
 
   /** A dispatch still awaiting billing (not cancelled) blocks deactivation. */

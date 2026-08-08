@@ -13,9 +13,10 @@ type Payment = {
   customerId: string;
   customer: PaymentCustomer;
   amount: string | number;
-  unallocatedAmount: string | number;
+  onAccount: string | number;
   mode: string;
   reference: string | null;
+  status?: 'ACTIVE' | 'VOID';
   date: string;
   createdAt: string;
   recordedBy: RecordedBy;
@@ -227,7 +228,7 @@ export default function PaymentsPage() {
                 <th className="px-6 py-4 text-right font-bold">Amount</th>
                 <th className="px-6 py-4 font-bold">Mode</th>
                 <th className="px-6 py-4 font-bold">Reference</th>
-                <th className="px-6 py-4 text-right font-bold">Unallocated</th>
+                <th className="px-6 py-4 text-right font-bold">On Account</th>
                 <th className="px-6 py-4 font-bold">Recorded By</th>
                 <th className="px-6 py-4 text-right font-bold">Actions</th>
               </tr>
@@ -280,12 +281,12 @@ export default function PaymentsPage() {
                     <td className="px-6 py-4 text-right">
                       <span
                         className={
-                          Number(payment.unallocatedAmount) > 0
+                          Number(payment.onAccount) > 0
                             ? 'font-semibold text-amber-400'
                             : 'text-on-surface-variant'
                         }
                       >
-                        {formatINR(payment.unallocatedAmount)}
+                        {formatINR(payment.onAccount)}
                       </span>
                     </td>
                     <td className="text-on-surface-variant px-6 py-4">

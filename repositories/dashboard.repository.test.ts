@@ -27,22 +27,26 @@ describe('DashboardRepository', () => {
     end: new Date('2026-08-01T00:00:00.000Z'),
   };
 
-  it('findInvoicesInRange filters by the given date range', async () => {
+  it('findInvoicesInRange filters by date range, STANDARD type, and ACTIVE status', async () => {
     vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
     await dashboardRepository.findInvoicesInRange(range);
     expect(prisma.invoice.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { date: { gte: range.start, lt: range.end } },
+        where: {
+          date: { gte: range.start, lt: range.end },
+          type: 'STANDARD',
+          status: 'ACTIVE',
+        },
       })
     );
   });
 
-  it('sumPaymentsInRange aggregates the amount sum for the given date range', async () => {
+  it('sumPaymentsInRange aggregates ACTIVE payments in the given date range', async () => {
     vi.mocked(prisma.payment.aggregate).mockResolvedValue({ _sum: { amount: 500 } } as never);
     const result = await dashboardRepository.sumPaymentsInRange(range);
     expect(prisma.payment.aggregate).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { date: { gte: range.start, lt: range.end } },
+        where: { date: { gte: range.start, lt: range.end }, status: 'ACTIVE' },
         _sum: { amount: true },
       })
     );
@@ -53,7 +57,9 @@ describe('DashboardRepository', () => {
     vi.mocked(prisma.purchase.groupBy).mockResolvedValue([
       { vendorId: 'v1', _sum: { totalAmount: 100, paidAmount: 40 } },
     ] as never);
-    vi.mocked(prisma.vendor.findMany).mockResolvedValue([{ id: 'v1', name: 'Vendor One' }] as never);
+    vi.mocked(prisma.vendor.findMany).mockResolvedValue([
+      { id: 'v1', name: 'Vendor One' },
+    ] as never);
 
     const result = await dashboardRepository.findVendorPayablesInRange(range);
 

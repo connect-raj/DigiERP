@@ -1,7 +1,20 @@
 import { PaymentMode } from '@prisma/client';
 import { paymentRepository, PaymentFilters } from '@/repositories/payment.repository';
 import { NotFoundError } from '@/lib/errors';
-import { CreatePaymentInput, AllocatePaymentsInput } from '@/validations/payment';
+import { getPaymentOnAccount } from '@/lib/balance';
+import {
+  CreatePaymentInput,
+  UpdateAllocationsInput,
+  AllocationLineInput,
+} from '@/validations/payment';
+
+function toAllocations(lines: AllocationLineInput[]) {
+  return lines.map((a) => ({
+    invoiceId: a.invoiceId ?? null,
+    amount: a.amount,
+    note: a.note,
+  }));
+}
 
 export class PaymentService {
   async getAll(filters: PaymentFilters) {
@@ -13,10 +26,9 @@ export class PaymentService {
 
     let totalReceived = 0;
     let totalUnallocated = 0;
-
     for (const row of rows) {
       totalReceived += Number(row.amount);
-      totalUnallocated += Number(row.unallocatedAmount);
+      totalUnallocated += getPaymentOnAccount(row.amount, row.allocations);
     }
 
     return {
@@ -36,10 +48,7 @@ export class PaymentService {
   }
 
   async getByCustomerId(customerId: string) {
-    const customer = await paymentRepository.findCustomerById(customerId);
-    if (!customer) {
-      throw new NotFoundError(`Customer with id '${customerId}' not found`);
-    }
+    await this.assertCustomer(customerId);
     return paymentRepository.findByCustomerId(customerId);
   }
 
@@ -51,24 +60,43 @@ export class PaymentService {
     return paymentRepository.findAllocationsByInvoiceId(invoiceId);
   }
 
-  async create(data: CreatePaymentInput, recordedById?: string) {
-    const customer = await paymentRepository.findCustomerById(data.customerId);
-    if (!customer) {
-      throw new NotFoundError(`Customer with id '${data.customerId}' not found`);
-    }
+  async getLedger(customerId: string) {
+    await this.assertCustomer(customerId);
+    return paymentRepository.findLedger(customerId);
+  }
 
-    return paymentRepository.createPaymentTx({
+  async getOpenInvoices(customerId: string) {
+    await this.assertCustomer(customerId);
+    return paymentRepository.findOpenInvoices(customerId);
+  }
+
+  async create(data: CreatePaymentInput, recordedById?: string) {
+    await this.assertCustomer(data.customerId);
+    return paymentRepository.createPaymentWithAllocations({
       customerId: data.customerId,
       amount: data.amount,
       mode: data.mode as PaymentMode,
       date: new Date(data.date),
       reference: data.reference,
+      allocations: toAllocations(data.allocations ?? []),
       recordedById,
     });
   }
 
-  async allocate(data: AllocatePaymentsInput) {
-    return paymentRepository.allocateBatch(data);
+  async updateAllocations(paymentId: string, data: UpdateAllocationsInput) {
+    return paymentRepository.updateAllocations(paymentId, toAllocations(data.allocations));
+  }
+
+  async voidPayment(paymentId: string) {
+    return paymentRepository.voidPayment(paymentId);
+  }
+
+  private async assertCustomer(customerId: string) {
+    const customer = await paymentRepository.findCustomerById(customerId);
+    if (!customer) {
+      throw new NotFoundError(`Customer with id '${customerId}' not found`);
+    }
+    return customer;
   }
 }
 

@@ -24,7 +24,7 @@ export async function generateInvoiceNo(
   });
 
   let nextNumber = 1;
-  if (latestInvoice) {
+  if (latestInvoice?.invoiceNo) {
     const parts = latestInvoice.invoiceNo.split('-');
     const lastNumberStr = parts[parts.length - 1];
     nextNumber = parseInt(lastNumberStr, 10) + 1;

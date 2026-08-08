@@ -12,6 +12,7 @@ export const createCustomerSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email('Invalid email').optional(),
   creditLimit: z.number().nonnegative('Credit limit must be >= 0').optional(),
+  billingMode: z.enum(['BILL_WISE', 'OPEN_BALANCE']).optional(),
 });
 
 export const updateCustomerSchema = createCustomerSchema.partial();

@@ -188,7 +188,7 @@ export default function CustomersPage() {
                 </tr>
               ) : (
                 customers.map((customer) => {
-                  const outstanding = Number(customer.outstandingBalance);
+                  const outstanding = Math.max(0, Number(customer.pendingTotal ?? 0));
                   const limit = Number(customer.creditLimit);
                   return (
                     <tr

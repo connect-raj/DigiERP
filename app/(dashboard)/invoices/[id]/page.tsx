@@ -28,7 +28,7 @@ type Invoice = {
   totalSgst: string | number;
   totalIgst: string | number;
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
-  paidAmount: string | number;
+  balanceDue: string | number;
   customer: {
     id: string;
     firmName: string;
@@ -148,7 +148,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const pendingAmt = Number(invoice.totalAmount) - Number(invoice.paidAmount);
+  const paidAmt = Number(invoice.totalAmount) - Number(invoice.balanceDue);
+  const pendingAmt = Number(invoice.balanceDue);
 
   return (
     <div className="flex flex-col gap-6 pb-12">
@@ -351,7 +352,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-on-surface-variant text-[13px]">Amount Paid</span>
                   <span className="font-data-tabular text-secondary font-semibold">
-                    {formatINR(invoice.paidAmount)}
+                    {formatINR(paidAmt)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -364,7 +365,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   <div
                     className="bg-secondary h-full rounded-full transition-all duration-1000"
                     style={{
-                      width: `${Number(invoice.totalAmount) > 0 ? (Number(invoice.paidAmount) / Number(invoice.totalAmount)) * 100 : 0}%`,
+                      width: `${Number(invoice.totalAmount) > 0 ? (paidAmt / Number(invoice.totalAmount)) * 100 : 0}%`,
                     }}
                   ></div>
                 </div>
@@ -434,7 +435,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         onSuccess={fetchInvoice}
         customerId={invoice.customer.id}
         customerName={invoice.customer.firmName}
-        initialInvoiceId={invoice.id}
       />
     </div>
   );

@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PaymentStatus } from '@prisma/client';
 import { invoiceService } from '@/services/invoice.service';
-import { createInvoiceSchema } from '@/validations/invoice';
+import { createInvoiceSchema, setOpeningBalanceSchema } from '@/validations/invoice';
 import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { authenticate } from '@/controllers/user.controller';
 import { parsePagination } from '@/lib/pagination';
 import { renderInvoicePdf, InvoiceSnapshot } from '@/lib/invoice-pdf';
 import { InvoiceFilters } from '@/repositories/invoice.repository';
+import type { InvoiceDisplayStatus } from '@/lib/balance';
 
 export class InvoiceController {
   async getAll(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const filters: InvoiceFilters = {
       customerId: searchParams.get('customerId') ?? undefined,
-      paymentStatus: (searchParams.get('paymentStatus') as PaymentStatus) ?? undefined,
+      paymentStatus: (searchParams.get('paymentStatus') as InvoiceDisplayStatus) ?? undefined,
       from: searchParams.get('from') ? new Date(searchParams.get('from')!) : undefined,
       to: searchParams.get('to') ? new Date(searchParams.get('to')!) : undefined,
       search: searchParams.get('search') ?? undefined,
@@ -80,6 +81,29 @@ export class InvoiceController {
     };
 
     return successResponse(response, 201);
+  }
+
+  async setOpeningBalance(req: NextRequest, customerId: string) {
+    authenticate(req);
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      throw new BadRequestError('Invalid JSON body');
+    }
+
+    const validated = setOpeningBalanceSchema.safeParse(body);
+    if (!validated.success) {
+      throw new BadRequestError(validated.error.issues[0]?.message ?? 'Validation error');
+    }
+
+    const invoice = await invoiceService.setOpeningBalance(
+      customerId,
+      validated.data.totalAmount,
+      validated.data.asOfDate
+    );
+    return successResponse(invoice);
   }
 
   async getPdf(_req: NextRequest, id: string) {

@@ -7,9 +7,10 @@ import AllocatePaymentsModal from '../_components/AllocatePaymentsModal';
 
 type Allocation = {
   id: string;
-  invoiceId: string;
-  invoiceNo: string;
+  invoiceId: string | null;
+  invoiceNo: string | null;
   amount: string | number;
+  note?: string | null;
   createdAt: string;
 };
 
@@ -18,9 +19,10 @@ type PaymentDetail = {
   customerId: string;
   customer: { id: string; firmName: string };
   amount: string | number;
-  unallocatedAmount: string | number;
+  onAccount: string | number;
   mode: string;
   reference: string | null;
+  status: 'ACTIVE' | 'VOID';
   date: string;
   createdAt: string;
   recordedBy: { id: string; username: string } | null;
@@ -103,17 +105,42 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const amount = Number(payment.amount);
-  const unallocated = Number(payment.unallocatedAmount);
+  const unallocated = Number(payment.onAccount);
   const allocated = amount - unallocated;
+  const isVoid = payment.status === 'VOID';
 
-  const statusLabel =
-    unallocated <= 0 ? 'Fully Allocated' : allocated > 0 ? 'Partial' : 'Unallocated';
-  const statusColor =
-    unallocated <= 0
+  const statusLabel = isVoid
+    ? 'Voided'
+    : unallocated <= 0
+      ? 'Fully Allocated'
+      : allocated > 0
+        ? 'Partial'
+        : 'On Account';
+  const statusColor = isVoid
+    ? 'bg-error/15 text-error'
+    : unallocated <= 0
       ? 'bg-secondary/15 text-secondary'
       : allocated > 0
         ? 'bg-orange-400/15 text-orange-400'
-        : 'bg-error/15 text-error';
+        : 'bg-amber-400/15 text-amber-400';
+
+  const handleVoid = async () => {
+    if (!window.confirm('Void this payment? Balances will revert; the record is kept for audit.')) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/payments/${id}/void`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to void payment');
+        return;
+      }
+      fetchPayment();
+    } catch (err) {
+      console.error('Failed to void payment', err);
+      window.alert('Failed to void payment');
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6 pb-12">
@@ -139,15 +166,26 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        {unallocated > 0 && (
-          <button
-            onClick={() => setIsAllocateModalOpen(true)}
-            className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold shadow-sm transition-all hover:opacity-90"
-          >
-            <span className="material-symbols-outlined text-[18px]">sync_alt</span>
-            Allocate to Invoices
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {!isVoid && unallocated > 0 && (
+            <button
+              onClick={() => setIsAllocateModalOpen(true)}
+              className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold shadow-sm transition-all hover:opacity-90"
+            >
+              <span className="material-symbols-outlined text-[18px]">sync_alt</span>
+              Allocate to Invoices
+            </button>
+          )}
+          {!isVoid && (
+            <button
+              onClick={handleVoid}
+              className="border-error/40 text-error hover:bg-error/10 font-body-md flex items-center gap-2 rounded-lg border-[0.5px] px-5 py-2 font-semibold transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">block</span>
+              Void
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

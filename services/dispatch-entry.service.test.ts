@@ -17,6 +17,14 @@ vi.mock('@/repositories/dispatch-entry.repository', () => ({
   },
 }));
 
+vi.mock('@/repositories/customer.repository', () => ({
+  customerRepository: {
+    getPendingTotal: vi.fn().mockResolvedValue(0),
+  },
+}));
+
+import { customerRepository } from '@/repositories/customer.repository';
+
 const gujaratCustomer = {
   id: 'cust-1',
   firmName: 'Test Firm',
@@ -45,6 +53,7 @@ const baseInput: CreateDispatchEntryInput = {
 describe('DispatchEntryService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(customerRepository.getPendingTotal).mockResolvedValue(0);
   });
 
   describe('getAll', () => {
@@ -209,9 +218,10 @@ describe('DispatchEntryService', () => {
     });
 
     it('includes a CREDIT_LIMIT_EXCEEDED warning when the dispatch pushes past the limit', async () => {
+      // derived pending total is near the limit, so this dispatch's value tips it over
+      vi.mocked(customerRepository.getPendingTotal).mockResolvedValue(99900);
       vi.spyOn(dispatchEntryRepository, 'findCustomerById').mockResolvedValue({
         ...gujaratCustomer,
-        outstandingBalance: 99900,
         creditLimit: 100000,
       } as never);
       vi.spyOn(dispatchEntryRepository, 'findProductsByIds').mockResolvedValue([product as never]);

@@ -32,16 +32,23 @@ export class DashboardService {
     const financialYearStartMonth = settings?.financialYearStart ?? 4;
     const range = getPeriodRange(period, new Date(), financialYearStartMonth);
 
-    const [invoices, collected, vendorPayables, topCategorySales, products, customers, recentActivity] =
-      await Promise.all([
-        dashboardRepository.findInvoicesInRange(range),
-        dashboardRepository.sumPaymentsInRange(range),
-        dashboardRepository.findVendorPayablesInRange(range),
-        dashboardRepository.findTopCategorySalesInRange(range),
-        dashboardRepository.findActiveProducts(),
-        dashboardRepository.findAllCustomers(),
-        this.getRecentActivity(),
-      ]);
+    const [
+      invoices,
+      collected,
+      vendorPayables,
+      topCategorySales,
+      products,
+      customers,
+      recentActivity,
+    ] = await Promise.all([
+      dashboardRepository.findInvoicesInRange(range),
+      dashboardRepository.sumPaymentsInRange(range),
+      dashboardRepository.findVendorPayablesInRange(range),
+      dashboardRepository.findTopCategorySalesInRange(range),
+      dashboardRepository.findActiveProducts(),
+      dashboardRepository.findAllCustomers(),
+      this.getRecentActivity(),
+    ]);
 
     return {
       period,

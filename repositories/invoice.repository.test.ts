@@ -98,39 +98,66 @@ describe('InvoiceRepository', () => {
   });
 
   describe('findAll', () => {
-    beforeEach(() => {
-      vi.mocked(prisma.invoice.count).mockResolvedValue(0);
-    });
-
-    it('filters by invoiceNo when search is provided', async () => {
+    it('filters by invoiceNo (STANDARD only) when search is provided', async () => {
       vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
       await invoiceRepository.findAll({ search: 'INV-2627' });
       expect(prisma.invoice.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { invoiceNo: { contains: 'INV-2627', mode: 'insensitive' } },
+          where: {
+            type: 'STANDARD',
+            status: 'ACTIVE',
+            invoiceNo: { contains: 'INV-2627', mode: 'insensitive' },
+          },
           orderBy: { date: 'desc' },
         })
       );
     });
 
-    it('returns total count alongside data and applies skip/take', async () => {
-      vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.invoice.count).mockResolvedValue(7);
-      const result = await invoiceRepository.findAll({ skip: 10, take: 10 });
-      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 10, take: 10 })
-      );
-      expect(result).toEqual({ data: [], total: 7 });
+    it('derives balances then paginates in code (total is the full matched set)', async () => {
+      const rows = Array.from({ length: 7 }, (_, i) => ({
+        id: `inv-${i}`,
+        totalAmount: 100,
+        paymentAllocations: [],
+      }));
+      vi.mocked(prisma.invoice.findMany).mockResolvedValue(rows as never);
+
+      const result = await invoiceRepository.findAll({ skip: 5, take: 10 });
+
+      expect(result.total).toBe(7);
+      expect(result.data).toHaveLength(2); // slice(5, 15)
+      expect(result.data[0]).toMatchObject({ balanceDue: 100, paymentStatus: 'UNPAID' });
+    });
+
+    it('filters by derived paymentStatus in code', async () => {
+      vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+        { id: 'a', totalAmount: 100, paymentAllocations: [] }, // UNPAID
+        { id: 'b', totalAmount: 100, paymentAllocations: [{ amount: 100 }] }, // PAID
+      ] as never);
+
+      const result = await invoiceRepository.findAll({ paymentStatus: 'PAID' });
+      expect(result.total).toBe(1);
+      expect(result.data[0]).toMatchObject({ id: 'b', paymentStatus: 'PAID' });
     });
   });
 
   describe('findStatsRows', () => {
-    it('selects only the fields needed for stat aggregation, unbounded', async () => {
+    it('selects derived-balance inputs (STANDARD only), unbounded', async () => {
       vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
       await invoiceRepository.findStatsRows({ search: 'INV-2627' });
       expect(prisma.invoice.findMany).toHaveBeenCalledWith({
-        where: { invoiceNo: { contains: 'INV-2627', mode: 'insensitive' } },
-        select: { totalAmount: true, paidAmount: true, paymentStatus: true },
+        where: {
+          type: 'STANDARD',
+          status: 'ACTIVE',
+          invoiceNo: { contains: 'INV-2627', mode: 'insensitive' },
+        },
+        select: {
+          totalAmount: true,
+          status: true,
+          paymentAllocations: {
+            where: { payment: { status: 'ACTIVE' } },
+            select: { amount: true },
+          },
+        },
       });
     });
   });
@@ -195,13 +222,11 @@ describe('InvoiceRepository', () => {
       });
     });
 
-    it('increments Customer.outstandingBalance and locks the dispatch entry as BILLED', async () => {
+    it('locks the dispatch entry as BILLED without touching any stored balance', async () => {
       await invoiceRepository.createInvoiceTx(baseCreateData);
 
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: 'cust-1' },
-        data: { outstandingBalance: { increment: 1180 } },
-      });
+      // balances are derived now — no customer balance column to increment
+      expect(prisma.customer.update).not.toHaveBeenCalled();
       expect(prisma.dispatchEntry.update).toHaveBeenCalledWith({
         where: { id: 'de-1' },
         data: { status: 'BILLED' },
