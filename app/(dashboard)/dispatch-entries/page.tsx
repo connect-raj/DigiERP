@@ -63,7 +63,11 @@ export default function DispatchEntriesPage() {
   const [entries, setEntries] = useState<DispatchEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_BILLING' | 'BILLED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_BILLING' | 'BILLED'>(() => {
+    if (typeof window === 'undefined') return 'ALL';
+    const s = new URLSearchParams(window.location.search).get('status');
+    return s === 'PENDING_BILLING' || s === 'BILLED' ? s : 'ALL';
+  });
   const [customerFilter, setCustomerFilter] = useState('ALL');
   const [showCancelled, setShowCancelled] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);

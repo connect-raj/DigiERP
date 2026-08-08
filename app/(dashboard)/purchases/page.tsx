@@ -53,7 +53,14 @@ export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    if (typeof window === 'undefined') return 'All';
+    const s = new URLSearchParams(window.location.search).get('paymentStatus');
+    if (s === 'PAID') return 'Paid';
+    if (s === 'PARTIAL') return 'Partial';
+    if (s === 'UNPAID') return 'Unpaid';
+    return 'All';
+  });
   const [vendorFilter, setVendorFilter] = useState(() =>
     typeof window !== 'undefined'
       ? new URLSearchParams(window.location.search).get('vendorId') || 'All'

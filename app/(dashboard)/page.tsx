@@ -43,26 +43,42 @@ function StatTile({
   label,
   value,
   tone = 'primary',
+  href,
 }: {
   label: string;
   value: string;
-  tone?: 'primary' | 'secondary' | 'error';
+  tone?: 'primary' | 'success' | 'error' | 'warning';
+  href?: string;
 }) {
+  const router = useRouter();
   const toneClass =
-    tone === 'secondary' ? 'text-secondary' : tone === 'error' ? 'text-error' : 'text-primary';
+    tone === 'success'
+      ? 'text-status-success'
+      : tone === 'error'
+        ? 'text-status-error'
+        : tone === 'warning'
+          ? 'text-accent-yellow'
+          : 'text-on-surface';
   return (
-    <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-      <p className="text-label-caps text-on-surface-variant mb-1">{label}</p>
-      <p className={`font-display text-headline-md ${toneClass}`}>{value}</p>
+    <div
+      onClick={href ? () => router.push(href) : undefined}
+      className={`bg-surface-container-low border-border rounded-xl border p-5 ${
+        href ? 'hover:bg-surface-container cursor-pointer transition-colors' : ''
+      }`}
+    >
+      <p className="text-on-surface-variant mb-1 text-[11px] font-medium tracking-widest uppercase">
+        {label}
+      </p>
+      <p className={`font-mono text-xl font-semibold ${toneClass}`}>{value}</p>
     </div>
   );
 }
 
 function StatTileSkeleton() {
   return (
-    <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-      <div className="bg-surface-variant mb-2 h-3 w-24 animate-pulse rounded" />
-      <div className="bg-surface-variant h-7 w-32 animate-pulse rounded" />
+    <div className="bg-surface-container-low border-border rounded-xl border p-5">
+      <div className="bg-surface-container-high mb-2 h-3 w-24 animate-pulse rounded" />
+      <div className="bg-surface-container-high h-7 w-32 animate-pulse rounded" />
     </div>
   );
 }
@@ -77,12 +93,12 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface-container border-outline-variant flex flex-col border-[0.5px]">
-      <div className="border-outline-variant flex items-center gap-2 border-b-[0.5px] px-5 py-4">
+    <div className="bg-surface-container-low border-border flex flex-col rounded-xl border">
+      <div className="border-border flex items-center gap-2 border-b px-5 py-4">
         <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
           {icon}
         </span>
-        <h3 className="text-body-md text-on-surface font-semibold">{title}</h3>
+        <h3 className="text-on-surface font-heading text-sm font-semibold">{title}</h3>
       </div>
       <div className="flex-1 p-5">{children}</div>
     </div>
@@ -114,6 +130,14 @@ export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDispatch, setPendingDispatch] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/dispatch-entries?status=PENDING_BILLING&isCancelled=false&limit=1')
+      .then((r) => r.json())
+      .then((d) => setPendingDispatch(d.pagination?.total ?? 0))
+      .catch((err) => console.error('Failed to fetch pending dispatch count', err));
+  }, []);
 
   const fetchDashboard = useCallback(async (p: DashboardPeriod, isInitial: boolean) => {
     if (!isInitial) setRefreshing(true);
@@ -134,9 +158,9 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDashboard(period, dashboard === null);
-  }, [period, fetchDashboard]);
+  }, [period, fetchDashboard]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -203,22 +227,35 @@ export default function DashboardPage() {
             refreshing ? 'opacity-60' : 'opacity-100'
           }`}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <StatTile label="Invoiced" value={formatINR(dashboard.revenue.invoiced)} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <StatTile
+              label="Invoiced"
+              value={formatINR(dashboard.revenue.invoiced)}
+              href="/invoices"
+            />
             <StatTile
               label="Collected"
               value={formatINR(dashboard.revenue.collected)}
-              tone="secondary"
+              tone="success"
+              href="/payments"
             />
             <StatTile
               label="Vendor Payables"
               value={formatINR(dashboard.vendorPayables.total)}
               tone="error"
+              href="/purchases?paymentStatus=UNPAID"
             />
             <StatTile
               label="Outstanding (Customers)"
               value={formatINR(dashboard.creditHealth.totalOutstanding)}
               tone="error"
+              href="/invoices?paymentStatus=UNPAID"
+            />
+            <StatTile
+              label="Awaiting Invoicing"
+              value={pendingDispatch != null ? String(pendingDispatch) : '—'}
+              tone="warning"
+              href="/dispatch-entries?status=PENDING_BILLING"
             />
           </div>
 
