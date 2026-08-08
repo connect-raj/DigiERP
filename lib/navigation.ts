@@ -57,6 +57,26 @@ function titleCase(segment: string) {
   return segment.charAt(0).toUpperCase() + segment.slice(1);
 }
 
+/** The single matcher: which group+item owns a pathname (longest href wins). */
+function matchNav(pathname: string): { group: NavGroup; item: NavItem } | null {
+  let match: { group: NavGroup; item: NavItem } | null = null;
+  for (const group of NAV_GROUPS) {
+    for (const item of group.items) {
+      if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
+        if (!match || item.href.length > match.item.href.length) {
+          match = { group, item };
+        }
+      }
+    }
+  }
+  return match;
+}
+
+/** Label of the group that owns the current route, or null (Dashboard/Settings/other). */
+export function findActiveGroup(pathname: string): string | null {
+  return matchNav(pathname)?.group.label ?? null;
+}
+
 /**
  * Derive a breadcrumb trail from a pathname using the nav model.
  * Group > Module > [sub-route]. Unknown dynamic segments (record ids) render
@@ -66,20 +86,18 @@ export function buildBreadcrumbs(pathname: string): Crumb[] {
   if (pathname === '/') return [{ label: 'Dashboard' }];
   if (pathname.startsWith('/settings')) return [{ label: 'Settings' }];
 
-  for (const group of NAV_GROUPS) {
-    for (const item of group.items) {
-      if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
-        const rest = pathname.slice(item.href.length).split('/').filter(Boolean);
-        const crumbs: Crumb[] = [
-          { label: group.label },
-          { label: item.label, href: rest.length ? item.href : undefined },
-        ];
-        rest.forEach((seg) => {
-          crumbs.push({ label: SEGMENT_LABELS[seg] ?? 'Details' });
-        });
-        return crumbs;
-      }
-    }
+  const matched = matchNav(pathname);
+  if (matched) {
+    const { group, item } = matched;
+    const rest = pathname.slice(item.href.length).split('/').filter(Boolean);
+    const crumbs: Crumb[] = [
+      { label: group.label },
+      { label: item.label, href: rest.length ? item.href : undefined },
+    ];
+    rest.forEach((seg) => {
+      crumbs.push({ label: SEGMENT_LABELS[seg] ?? 'Details' });
+    });
+    return crumbs;
   }
 
   // Routes not present in the nav (e.g. /categories, reachable but demoted).
