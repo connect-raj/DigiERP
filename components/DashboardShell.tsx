@@ -19,12 +19,12 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   const closeNav = () => setIsMobileNavOpen(false);
 
   return (
-    <div className="text-on-surface font-body-md text-body-md selection:bg-surface-container-highest flex h-screen overflow-hidden bg-[#181818]">
+    <div className="text-on-surface font-body-md text-body-md selection:bg-surface-container-highest bg-background flex h-screen overflow-hidden">
       <Sidebar isOpen={isMobileNavOpen} onClose={closeNav} />
 
       <div className="flex w-full flex-1 flex-col overflow-hidden">
         <Header onToggleSidebar={toggleNav} />
-        <main className="flex-1 overflow-y-auto bg-[#181818] p-4 sm:p-6 lg:ml-[260px] lg:p-10">
+        <main className="bg-background flex-1 overflow-y-auto p-4 sm:p-6 lg:ml-[260px] lg:p-10">
           <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-8">
             {children}
           </div>
