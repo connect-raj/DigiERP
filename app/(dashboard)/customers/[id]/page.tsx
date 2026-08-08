@@ -6,6 +6,7 @@ import Link from 'next/link';
 import CustomerFormDrawer, { Customer } from '../_components/CustomerFormDrawer';
 import RecordPaymentModal from '../../payments/_components/RecordPaymentModal';
 import AllocatePaymentsModal from '../../payments/_components/AllocatePaymentsModal';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
 
 type CustomerPrice = {
   id: string;
@@ -269,13 +270,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   if (loading) {
     return (
-      <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
-        <div className="flex flex-col items-center gap-2">
-          <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-            progress_activity
-          </span>
-          <span>Loading customer...</span>
-        </div>
+      <div className="flex h-full items-center justify-center p-12">
+        <RegistrationMark size="lg" spinning />
       </div>
     );
   }

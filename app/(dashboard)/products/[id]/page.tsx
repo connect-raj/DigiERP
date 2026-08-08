@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
 
 type StockTxn = {
   id: string;
@@ -107,10 +108,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   if (loading) {
     return (
-      <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
-        <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-          progress_activity
-        </span>
+      <div className="flex h-full items-center justify-center p-12">
+        <RegistrationMark size="lg" spinning />
       </div>
     );
   }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AllocatePaymentsModal from '../../payments/_components/AllocatePaymentsModal';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
 
 type InvoiceItem = {
   id: string;
@@ -117,18 +118,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }, [id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInvoice();
   }, [fetchInvoice]);
 
   if (loading) {
     return (
-      <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
-        <div className="flex flex-col items-center gap-2">
-          <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-            progress_activity
-          </span>
-          <span>Loading invoice...</span>
-        </div>
+      <div className="flex h-full items-center justify-center p-12">
+        <RegistrationMark size="lg" spinning />
       </div>
     );
   }
