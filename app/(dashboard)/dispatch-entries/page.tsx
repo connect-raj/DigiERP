@@ -1,9 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
+import { StatusPill, type Status } from '@/components/ui/StatusPill';
 
 const PAGE_LIMIT = 20;
 
@@ -31,6 +37,27 @@ type DispatchEntry = {
   };
 };
 
+function formatINR(val: string | number) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(Number(val));
+}
+
+function formatDate(val: string) {
+  return new Date(val).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function dispatchStatus(entry: DispatchEntry): Status {
+  if (entry.isCancelled) return 'CANCELLED';
+  return entry.status === 'BILLED' ? 'INVOICED' : 'DISPATCHED';
+}
+
 export default function DispatchEntriesPage() {
   const router = useRouter();
   const [entries, setEntries] = useState<DispatchEntry[]>([]);
@@ -45,7 +72,6 @@ export default function DispatchEntriesPage() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
-  // Fetch customers for filters
   const fetchCustomers = async () => {
     try {
       // Filter dropdown needs the full list, not a paginated page.
@@ -59,7 +85,6 @@ export default function DispatchEntriesPage() {
     }
   };
 
-  // Fetch dispatch entries based on filters
   const fetchDispatchEntries = async () => {
     try {
       setLoading(true);
@@ -104,265 +129,181 @@ export default function DispatchEntriesPage() {
     fetchDispatchEntries();
   }, [search, statusFilter, customerFilter, showCancelled, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Indian format helper for currency
-  const formatINR = (val: string | number) => {
-    const num = Number(val);
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(num);
-  };
+  const columns = useMemo<ColumnDef<DispatchEntry, unknown>[]>(
+    () => [
+      {
+        id: 'challanNo',
+        accessorFn: (e) => e.challanNo,
+        header: 'Challan No.',
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold">{row.original.challanNo}</span>
+        ),
+      },
+      {
+        id: 'customer',
+        accessorFn: (e) => e.customer?.firmName ?? '',
+        header: 'Customer',
+        cell: ({ row }) => <span className="font-medium">{row.original.customer?.firmName}</span>,
+      },
+      {
+        id: 'date',
+        accessorFn: (e) => new Date(e.date).getTime(),
+        header: 'Date',
+        cell: ({ row }) => (
+          <span className="text-on-surface-variant">{formatDate(row.original.date)}</span>
+        ),
+      },
+      {
+        id: 'place',
+        accessorFn: (e) => e.place,
+        header: 'Place',
+        cell: ({ row }) => <span className="text-on-surface-variant">{row.original.place}</span>,
+      },
+      {
+        id: 'totalAmount',
+        accessorFn: (e) => Number(e.totalAmount),
+        header: 'Total Amount',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono font-medium">{formatINR(row.original.totalAmount)}</span>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (e) => dispatchStatus(e),
+        header: 'Status',
+        cell: ({ row }) => <StatusPill status={dispatchStatus(row.original)} />,
+      },
+    ],
+    []
+  );
 
   return (
     <div className="flex min-h-full flex-col gap-6">
-      {/* Header Area */}
-      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <h1 className="font-headline-md text-headline-md text-primary">Dispatch Entries</h1>
-          <p className="text-on-surface-variant text-body-sm mt-1">
-            Digitally record and track physical Challan dispatches.
-          </p>
-        </div>
-        <Link
-          href="/dispatch-entries/new"
-          className="bg-secondary-container hover:bg-secondary-container/85 text-on-secondary-container font-body-md flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold transition-all duration-200 active:scale-95"
-        >
-          <span className="material-symbols-outlined text-[20px]">add</span>
-          New Dispatch Entry
-        </Link>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-surface-container border-outline-variant flex flex-col gap-4 rounded-xl border-[0.5px] p-5">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Search Box */}
-          <div className="relative flex min-w-[240px] flex-1 items-center">
-            <span className="material-symbols-outlined text-on-surface-variant absolute left-3 text-[20px]">
-              search
-            </span>
-            <input
-              className="bg-surface-container-lowest border-outline-variant text-body-md focus:border-secondary w-full rounded-lg border-[0.5px] py-2 pr-4 pl-10 transition-colors focus:ring-0"
-              placeholder="Search by Challan No..."
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {/* Status Tabs */}
-          <div className="bg-surface-container-low border-outline-variant flex rounded-lg border-[0.5px] p-1">
-            {(
-              [
-                { label: 'All', value: 'ALL' },
-                { label: 'Pending Billing', value: 'PENDING_BILLING' },
-                { label: 'Billed', value: 'BILLED' },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setStatusFilter(tab.value)}
-                className={`text-body-md rounded-md px-4 py-1.5 font-medium transition-colors ${statusFilter === tab.value ? 'bg-surface-variant text-primary' : 'text-on-surface-variant hover:text-primary'}`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Customer Dropdown */}
-          <div className="relative min-w-[200px]">
-            <select
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by Challan No..."
+        filters={
+          <>
+            <FilterSelect
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="PENDING_BILLING">Pending Billing</option>
+              <option value="BILLED">Billed</option>
+            </FilterSelect>
+            <FilterSelect
               value={customerFilter}
               onChange={(e) => setCustomerFilter(e.target.value)}
-              className="bg-surface-container-low border-outline-variant text-body-md text-on-surface-variant w-full appearance-none rounded-lg border-[0.5px] py-2.5 pr-10 pl-4 transition-colors outline-none hover:border-[#8e9192]"
             >
-              <option value="ALL">Customer: All</option>
+              <option value="ALL">All Customers</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.firmName}
                 </option>
               ))}
-            </select>
-            <span className="material-symbols-outlined text-on-surface-variant pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[18px]">
-              expand_more
-            </span>
-          </div>
+            </FilterSelect>
+            <div className="bg-surface-container-low border-border flex h-9 items-center gap-2 rounded-lg border px-3">
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="text-on-surface w-28 border-none bg-transparent p-0 text-sm focus:ring-0 focus:outline-none"
+              />
+              <span className="text-on-surface-variant">–</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="text-on-surface w-28 border-none bg-transparent p-0 text-sm focus:ring-0 focus:outline-none"
+              />
+            </div>
+            <label className="text-on-surface-variant flex cursor-pointer items-center gap-2 text-sm select-none">
+              <input
+                type="checkbox"
+                checked={showCancelled}
+                onChange={(e) => setShowCancelled(e.target.checked)}
+                className="accent-accent-cyan h-4 w-4"
+              />
+              Show cancelled
+            </label>
+          </>
+        }
+        actions={
+          <Button asChild>
+            <Link href="/dispatch-entries/new">
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              New Dispatch Entry
+            </Link>
+          </Button>
+        }
+      />
 
-          {/* Cancelled Toggle */}
-          <label className="flex cursor-pointer items-center gap-2 select-none">
-            <input
-              type="checkbox"
-              checked={showCancelled}
-              onChange={(e) => setShowCancelled(e.target.checked)}
-              className="accent-secondary h-4 w-4 rounded border-gray-300 focus:ring-0"
-            />
-            <span className="text-body-md text-on-surface-variant">Show cancelled</span>
-          </label>
-        </div>
-
-        {/* Date Filters Row */}
-        <div className="flex flex-wrap items-center gap-4 border-t border-[#2e2e2e]/50 pt-4">
-          <div className="flex items-center gap-2">
-            <span className="text-body-sm text-on-surface-variant">From Date:</span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="bg-surface-container-low border-outline-variant text-body-md text-on-surface rounded-lg border-[0.5px] px-3 py-1.5 outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-body-sm text-on-surface-variant">To Date:</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="bg-surface-container-low border-outline-variant text-body-md text-on-surface rounded-lg border-[0.5px] px-3 py-1.5 outline-none"
-            />
-          </div>
-          {(fromDate || toDate) && (
-            <button
-              onClick={() => {
-                setFromDate('');
-                setToDate('');
-              }}
-              className="text-body-sm text-secondary hover:underline"
-            >
-              Clear dates
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Data Table */}
-      <div className="bg-surface-container border-outline-variant flex flex-1 flex-col overflow-hidden rounded-xl border-[0.5px]">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="bg-surface-container-high border-outline-variant border-b-[0.5px]">
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 tracking-wider uppercase">
-                  Challan No.
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 tracking-wider uppercase">
-                  Customer
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 tracking-wider uppercase">
-                  Date
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 tracking-wider uppercase">
-                  Place
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 text-right tracking-wider uppercase">
-                  Total Amount
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 tracking-wider uppercase">
-                  Status
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant px-6 py-4 text-right tracking-wider uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-outline-variant/30 divide-y">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="text-on-surface-variant p-10 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-                        progress_activity
-                      </span>
-                      <span>Loading dispatch entries...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : pagination.total === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-on-surface-variant p-12 text-center">
-                    <div className="flex flex-col items-center justify-center gap-4 py-8">
-                      <span className="material-symbols-outlined text-on-surface-variant/40 text-[48px]">
-                        local_shipping
-                      </span>
-                      <div>
-                        <h4 className="text-body-lg text-primary font-bold">
-                          No Dispatch Entries Found
-                        </h4>
-                        <p className="text-body-sm text-on-surface-variant mt-1">
-                          Try adjusting your search filters or record a new dispatch entry.
-                        </p>
-                      </div>
-                      <Link
-                        href="/dispatch-entries/new"
-                        className="bg-secondary-container hover:bg-secondary-container/85 text-on-secondary-container font-body-sm rounded-lg px-4 py-2 font-semibold transition-all duration-200"
-                      >
-                        Create New Entry
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                entries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    onClick={() => router.push(`/dispatch-entries/${entry.id}`)}
-                    className={`group cursor-pointer transition-colors hover:bg-[#252525] ${entry.isCancelled ? 'line-through decoration-[#ef4444] opacity-40' : ''}`}
-                  >
-                    <td className="font-data-tabular text-data-tabular text-primary px-6 py-4 font-semibold">
-                      {entry.challanNo}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-body-md text-on-surface font-medium">
-                        {entry.customer?.firmName}
-                      </span>
-                    </td>
-                    <td className="text-body-md text-on-surface-variant px-6 py-4">
-                      {new Date(entry.date).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </td>
-                    <td className="text-body-md text-on-surface-variant px-6 py-4">
-                      {entry.place}
-                    </td>
-                    <td className="font-data-tabular text-data-tabular text-secondary px-6 py-4 text-right font-medium">
-                      {formatINR(entry.totalAmount)}
-                    </td>
-                    <td className="px-6 py-4">
-                      {entry.isCancelled ? (
-                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-400 uppercase">
-                          Cancelled
-                        </span>
-                      ) : entry.status === 'BILLED' ? (
-                        <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-xs font-semibold text-green-400 uppercase">
-                          Billed
-                        </span>
-                      ) : (
-                        <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-400 uppercase">
-                          Pending Billing
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="text-on-surface-variant group-hover:text-primary p-1 transition-colors">
-                        <span className="material-symbols-outlined text-[20px]">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {!loading && (
-          <Pagination
-            page={page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
-            limit={PAGE_LIMIT}
-            onPageChange={setPage}
+      <DataTable
+        columns={columns}
+        data={entries}
+        getRowId={(e) => e.id}
+        loading={loading}
+        emptyState={
+          <EmptyState
+            icon={<span className="material-symbols-outlined text-[40px]">local_shipping</span>}
+            title="No dispatch entries found"
+            description="Try adjusting your filters or record a new dispatch entry."
+            action={
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dispatch-entries/new">Create new entry</Link>
+              </Button>
+            }
           />
+        }
+        renderExpanded={(entry) => (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-on-surface-variant text-xs">Items</dt>
+                <dd className="font-mono">{entry._count?.items ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant text-xs">Place</dt>
+                <dd>{entry.place}</dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant text-xs">Total</dt>
+                <dd className="font-mono">{formatINR(entry.totalAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant text-xs">Status</dt>
+                <dd>
+                  <StatusPill status={dispatchStatus(entry)} />
+                </dd>
+              </div>
+            </dl>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/dispatch-entries/${entry.id}`);
+              }}
+            >
+              View detail
+            </Button>
+          </div>
         )}
-      </div>
+        footer={
+          !loading && (
+            <Pagination
+              page={page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={PAGE_LIMIT}
+              onPageChange={setPage}
+            />
+          )
+        }
+      />
     </div>
   );
 }

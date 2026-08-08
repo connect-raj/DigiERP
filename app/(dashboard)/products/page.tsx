@@ -1,8 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 
 const PAGE_LIMIT = 20;
 
@@ -194,182 +199,165 @@ export default function ProductsPage() {
     fetchProducts();
   }, [search, categoryId, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <div className="flex min-h-full flex-col gap-8">
-      {/* Controls Container */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
-        {/* Search */}
-        <div className="flex h-[52px] items-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 transition-colors focus-within:border-[#555] md:col-span-9">
-          <span className="material-symbols-outlined px-3 text-[#8e9192]">search</span>
-          <input
-            className="text-on-surface font-body-md h-full w-full border-none bg-transparent p-0 text-[13px] placeholder:text-[#8e9192] focus:ring-0"
-            placeholder="Search products by name or category..."
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="flex justify-end md:col-span-3">
-          <button
-            onClick={openCreateModal}
-            className="bg-primary text-background font-body-md hover:bg-opacity-90 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl font-bold shadow-sm transition-all"
-          >
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            Add Product
-          </button>
-        </div>
-        {/* Filters */}
-        <div className="flex gap-4 md:col-span-12">
-          <div className="group relative flex flex-1 items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
-            <select
-              className="font-body-md h-full w-full cursor-pointer appearance-none border-none bg-transparent text-[13px] text-[#c4c7c8] outline-none"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <option value="">Category: All</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <span className="material-symbols-outlined pointer-events-none text-[#8e9192]">
-              arrow_drop_down
+  const columns = useMemo<ColumnDef<Product, unknown>[]>(
+    () => [
+      {
+        id: 'name',
+        accessorFn: (p) => p.name,
+        header: 'Name & SKU',
+        cell: ({ row }) => (
+          <div className="flex flex-col">
+            <span className="font-medium">{row.original.name}</span>
+            <span className="text-on-surface-variant font-mono text-[11px] tracking-wider uppercase">
+              {row.original.sku}
             </span>
           </div>
-          <div className="group relative flex flex-1 cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
-            <span className="font-body-md text-[13px] text-[#c4c7c8]">Status: Active</span>
-            <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
+        ),
+      },
+      {
+        id: 'category',
+        accessorFn: (p) => p.category?.name ?? '',
+        header: 'Category',
+        cell: ({ row }) => (
+          <span className="text-on-surface-variant">
+            {row.original.category?.name || 'Uncategorized'}
+          </span>
+        ),
+      },
+      {
+        id: 'price',
+        accessorFn: (p) => Number(p.basePrice),
+        header: 'Price',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono">
+            {new Intl.NumberFormat('en-IN', {
+              style: 'currency',
+              currency: 'INR',
+              minimumFractionDigits: 2,
+            }).format(Number(row.original.basePrice))}
+          </span>
+        ),
+      },
+      {
+        id: 'stock',
+        accessorFn: (p) => p.currentStock,
+        header: 'Stock',
+        cell: ({ row }) => {
+          const low = row.original.currentStock < row.original.lowerStockLimit;
+          return (
+            <div className="flex items-center gap-2">
+              <span className={low ? 'text-status-error font-mono font-bold' : 'font-mono'}>
+                {row.original.currentStock} {row.original.unit}
+              </span>
+              {low && (
+                <span className="bg-status-error/12 text-status-error rounded px-2 py-0.5 text-[10px] font-bold uppercase">
+                  Low
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'status',
+        accessorFn: (p) => (p.isActive ? 1 : 0),
+        header: 'Status',
+        cell: ({ row }) => (
+          <span
+            className={
+              row.original.isActive
+                ? 'bg-status-success/12 text-status-success rounded-full px-2 py-0.5 text-[11px] font-medium uppercase'
+                : 'bg-status-neutral/12 text-status-neutral rounded-full px-2 py-0.5 text-[11px] font-medium uppercase'
+            }
+          >
+            {row.original.isActive ? 'Active' : 'Inactive'}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: '',
+        enableSorting: false,
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openEditModal(row.original);
+              }}
+              className="text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-md p-1.5 transition-colors"
+              title="Edit"
+            >
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(row.original.id, row.original.name);
+              }}
+              className="text-on-surface-variant hover:text-status-error hover:bg-surface-container-high rounded-md p-1.5 transition-colors"
+              title="Delete"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete</span>
+            </button>
           </div>
-          <button className="flex items-center justify-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 text-[#8e9192] transition-colors hover:bg-[#252525]">
-            <span className="material-symbols-outlined">filter_list</span>
-          </button>
-        </div>
-      </div>
+        ),
+      },
+    ],
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
-      {/* Products Table */}
-      <div className="flex min-h-[500px] flex-col overflow-hidden rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c]">
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr className="border-b-[0.5px] border-[#333] bg-[#222]">
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Name & SKU
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Category
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-right tracking-widest uppercase">
-                Price
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Stock
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Status
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-right tracking-widest uppercase">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y-[0.5px] divide-[#333]">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="text-on-surface-variant px-6 py-8 text-center">
-                  Loading products...
-                </td>
-              </tr>
-            ) : pagination.total === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-on-surface-variant px-6 py-8 text-center">
-                  No products found.
-                </td>
-              </tr>
-            ) : (
-              products.map((product) => (
-                <tr
-                  key={product.id}
-                  onClick={() => router.push(`/products/${product.id}`)}
-                  className="group cursor-pointer transition-colors hover:bg-[#252525]"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="text-primary font-semibold">{product.name}</span>
-                      <span className="text-on-surface-variant font-data-tabular text-[11px] tracking-wider uppercase">
-                        {product.sku}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="text-on-surface-variant px-6 py-4 text-[13px]">
-                    {product.category?.name || 'Uncategorized'}
-                  </td>
-                  <td className="font-data-tabular text-primary px-6 py-4 text-right text-[13px]">
-                    ₹ {Number(product.basePrice).toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`font-data-tabular text-[13px] ${product.currentStock < product.lowerStockLimit ? 'text-error font-bold' : 'text-primary'}`}
-                      >
-                        {product.currentStock} {product.unit}
-                      </span>
-                      {product.currentStock < product.lowerStockLimit && (
-                        <span className="bg-error/10 text-error rounded px-2 py-0.5 text-[10px] font-bold tracking-tighter uppercase">
-                          Low
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {product.isActive ? (
-                      <span className="inline-flex items-center rounded bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="bg-outline-variant/20 text-outline inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium">
-                        Inactive
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(product);
-                        }}
-                        className="text-outline hover:text-primary rounded-md p-1.5 transition-colors"
-                        title="Edit"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">edit</span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(product.id, product.name);
-                        }}
-                        className="text-outline hover:text-error rounded-md p-1.5 transition-colors"
-                        title="Delete"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        {!loading && (
-          <Pagination
-            page={page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
-            limit={PAGE_LIMIT}
-            onPageChange={setPage}
+  return (
+    <div className="flex min-h-full flex-col gap-6">
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search products by name or category..."
+        filters={
+          <FilterSelect value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">All Categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </FilterSelect>
+        }
+        actions={
+          <Button onClick={openCreateModal}>
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Add Product
+          </Button>
+        }
+      />
+
+      <DataTable
+        columns={columns}
+        data={products}
+        getRowId={(p) => p.id}
+        loading={loading}
+        onRowClick={(p) => router.push(`/products/${p.id}`)}
+        emptyState={
+          <EmptyState
+            icon={<span className="material-symbols-outlined text-[40px]">inventory_2</span>}
+            title="No products found"
+            description="Add a product or adjust your filters."
           />
-        )}
-      </div>
+        }
+        footer={
+          !loading && (
+            <Pagination
+              page={page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={PAGE_LIMIT}
+              onPageChange={setPage}
+            />
+          )
+        }
+      />
 
       {/* Add Product Modal */}
       {isModalOpen && (
