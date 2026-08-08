@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar } from '@/components/ui/ListToolbar';
+import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
 
 const PAGE_LIMIT = 20;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Vendor = {
   id: string;
@@ -36,6 +38,8 @@ export default function VendorsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -82,6 +86,8 @@ export default function VendorsPage() {
       isActive: vendor.isActive,
     });
     setEditingId(vendor.id);
+    setErrors({});
+    setSubmitError(null);
     setIsModalOpen(true);
   };
 
@@ -97,11 +103,28 @@ export default function VendorsPage() {
       isActive: true,
     });
     setEditingId(null);
+    setErrors({});
+    setSubmitError(null);
     setIsModalOpen(true);
+  };
+
+  const validate = (): boolean => {
+    const next: Record<string, string> = {};
+    if (!formData.name.trim()) next.name = 'Vendor name is required.';
+    if (!formData.phone.trim()) next.phone = 'Phone is required.';
+    if (!editingId && !formData.address.trim()) next.address = 'Address is required.';
+    if (!editingId && !formData.state.trim()) next.state = 'State is required.';
+    if (formData.email.trim() && !EMAIL_REGEX.test(formData.email.trim())) {
+      next.email = 'Invalid email.';
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    if (!validate()) return;
     try {
       setIsSubmitting(true);
       const url = editingId ? `/api/vendors/${editingId}` : '/api/vendors';
@@ -140,11 +163,11 @@ export default function VendorsPage() {
         fetchVendors();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.message}`);
+        setSubmitError(error.error?.message ?? error.message ?? 'Failed to save vendor.');
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} vendor`, error);
-      alert(`Failed to ${editingId ? 'update' : 'create'} vendor`);
+      setSubmitError(`Failed to ${editingId ? 'update' : 'create'} vendor.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -333,7 +356,7 @@ export default function VendorsPage() {
       {/* Add Vendor Modal */}
       {isModalOpen && (
         <div className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
-          <div className="animate-in zoom-in-95 hide-scrollbar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6 shadow-2xl duration-200">
+          <div className="animate-in zoom-in-95 hide-scrollbar border-border bg-surface-container max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-6 shadow-2xl duration-200">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="font-headline-md text-headline-md text-primary">
                 {editingId ? 'Edit Vendor' : 'Add New Vendor'}
@@ -346,106 +369,72 @@ export default function VendorsPage() {
               </button>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                  Company / Vendor Name *
-                </label>
-                <input
-                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+              <SubmitError>{submitError}</SubmitError>
+              <FormField label="Company / Vendor Name" required error={errors.name}>
+                <TextInput
                   placeholder="e.g. Acme Supplies"
-                  type="text"
                   value={formData.name}
+                  invalid={!!errors.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
                 />
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Phone *
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                <FormField label="Phone" required error={errors.phone}>
+                  <TextInput
                     placeholder="+91..."
-                    type="text"
                     value={formData.phone}
+                    invalid={!!errors.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    required
                   />
-                </div>
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Email
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
-                    placeholder="contact@company.com"
+                </FormField>
+                <FormField label="Email" error={errors.email}>
+                  <TextInput
                     type="email"
+                    placeholder="contact@company.com"
                     value={formData.email}
+                    invalid={!!errors.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
-                </div>
+                </FormField>
               </div>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                  Address *
-                </label>
-                <input
-                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+              <FormField label="Address" required={!editingId} error={errors.address}>
+                <TextInput
                   placeholder="Full business address"
-                  type="text"
                   value={formData.address}
+                  invalid={!!errors.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required={!editingId}
                 />
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    State *
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                <FormField label="State" required={!editingId} error={errors.state}>
+                  <TextInput
                     placeholder="e.g. Maharashtra"
-                    type="text"
                     value={formData.state}
+                    invalid={!!errors.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    required={!editingId}
                   />
-                </div>
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    GSTIN
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                </FormField>
+                <FormField label="GSTIN">
+                  <TextInput
+                    className="font-mono uppercase"
                     placeholder="15-digit GSTIN"
-                    type="text"
                     value={formData.gstin}
                     onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
                   />
-                </div>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Payment Terms (Days)
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
-                    placeholder="30"
+                <FormField label="Payment Terms (Days)">
+                  <TextInput
                     type="number"
+                    placeholder="30"
                     value={formData.paymentTerms}
                     onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
                   />
-                </div>
+                </FormField>
                 {editingId && (
-                  <div>
-                    <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                      Status
-                    </label>
-                    <select
-                      className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                  <FormField label="Status">
+                    <SelectInput
                       value={formData.isActive.toString()}
                       onChange={(e) =>
                         setFormData({ ...formData, isActive: e.target.value === 'true' })
@@ -453,26 +442,23 @@ export default function VendorsPage() {
                     >
                       <option value="true">Active</option>
                       <option value="false">Inactive</option>
-                    </select>
-                  </div>
+                    </SelectInput>
+                  </FormField>
                 )}
               </div>
-              <div className="mt-6 flex gap-4 border-t-[0.5px] border-[#333] pt-4">
-                <button
-                  className="text-primary flex-1 rounded-lg border-[0.5px] border-[#444] py-2.5 font-semibold transition-all hover:bg-[#252525]"
-                  onClick={() => setIsModalOpen(false)}
+              <div className="border-border mt-6 flex gap-3 border-t pt-4">
+                <Button
                   type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
                 >
                   Cancel
-                </button>
-                <button
-                  className="bg-primary text-background hover:bg-opacity-90 flex-1 rounded-lg py-2.5 font-semibold transition-all disabled:opacity-50"
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
-                </button>
+                </Button>
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving…' : editingId ? 'Update' : 'Create'}
+                </Button>
               </div>
             </form>
           </div>

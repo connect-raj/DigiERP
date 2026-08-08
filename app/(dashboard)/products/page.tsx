@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
+import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
 
 const PAGE_LIMIT = 20;
 
@@ -37,6 +38,8 @@ export default function ProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     categoryId: '',
@@ -93,6 +96,8 @@ export default function ProductsPage() {
       isActive: product.isActive,
     });
     setEditingId(product.id);
+    setErrors({});
+    setSubmitError(null);
     setIsModalOpen(true);
   };
 
@@ -106,11 +111,29 @@ export default function ProductsPage() {
       isActive: true,
     });
     setEditingId(null);
+    setErrors({});
+    setSubmitError(null);
     setIsModalOpen(true);
+  };
+
+  const validate = (): boolean => {
+    const next: Record<string, string> = {};
+    if (!formData.name.trim()) next.name = 'Product name is required.';
+    if (!formData.categoryId) next.categoryId = 'Category is required.';
+    if (!formData.basePrice.trim() || Number(formData.basePrice) < 0) {
+      next.basePrice = 'Enter a valid base price.';
+    }
+    if (!formData.lowerStockLimit.trim() || Number(formData.lowerStockLimit) < 0) {
+      next.lowerStockLimit = 'Enter a valid stock level.';
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    if (!validate()) return;
     try {
       setIsSubmitting(true);
       const url = editingId ? `/api/products/${editingId}` : '/api/products';
@@ -145,11 +168,11 @@ export default function ProductsPage() {
         fetchProducts();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.message}`);
+        setSubmitError(error.error?.message ?? error.message ?? 'Failed to save product.');
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} product`, error);
-      alert(`Failed to ${editingId ? 'update' : 'create'} product`);
+      setSubmitError(`Failed to ${editingId ? 'update' : 'create'} product.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -362,7 +385,7 @@ export default function ProductsPage() {
       {/* Add Product Modal */}
       {isModalOpen && (
         <div className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
-          <div className="animate-in zoom-in-95 w-full max-w-md rounded-2xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6 shadow-2xl duration-200">
+          <div className="animate-in zoom-in-95 border-border bg-surface-container w-full max-w-md rounded-2xl border p-6 shadow-2xl duration-200">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="font-headline-md text-headline-md text-primary">
                 {editingId ? 'Edit Product' : 'Add New Product'}
@@ -375,28 +398,20 @@ export default function ProductsPage() {
               </button>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                  Product Name
-                </label>
-                <input
-                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+              <SubmitError>{submitError}</SubmitError>
+              <FormField label="Product Name" required error={errors.name}>
+                <TextInput
                   placeholder="e.g. Cyan Ink 1Ltr"
-                  type="text"
                   value={formData.name}
+                  invalid={!!errors.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
                 />
-              </div>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                  Category
-                </label>
-                <select
-                  className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+              </FormField>
+              <FormField label="Category" required error={errors.categoryId}>
+                <SelectInput
                   value={formData.categoryId}
+                  invalid={!!errors.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  required
                 >
                   <option value="" disabled>
                     Select a category
@@ -406,30 +421,22 @@ export default function ProductsPage() {
                       {c.name}
                     </option>
                   ))}
-                </select>
-              </div>
+                </SelectInput>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Base Price (₹)
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                <FormField label="Base Price (₹)" required error={errors.basePrice}>
+                  <TextInput
                     placeholder="0.00"
                     type="number"
                     min="0"
                     step="0.01"
                     value={formData.basePrice}
+                    invalid={!!errors.basePrice}
                     onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                    required
                   />
-                </div>
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Unit
-                  </label>
-                  <select
-                    className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                </FormField>
+                <FormField label="Unit">
+                  <SelectInput
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                   >
@@ -437,31 +444,23 @@ export default function ProductsPage() {
                     <option value="KG">KG (Kilograms)</option>
                     <option value="PCS">PCS (Pieces)</option>
                     <option value="MTR">MTR (Meters)</option>
-                  </select>
-                </div>
+                  </SelectInput>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Low Stock Alert Level
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                <FormField label="Low Stock Alert Level" required error={errors.lowerStockLimit}>
+                  <TextInput
                     placeholder="10"
                     type="number"
                     min="0"
                     value={formData.lowerStockLimit}
+                    invalid={!!errors.lowerStockLimit}
                     onChange={(e) => setFormData({ ...formData, lowerStockLimit: e.target.value })}
-                    required
                   />
-                </div>
+                </FormField>
                 {editingId && (
-                  <div>
-                    <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                      Status
-                    </label>
-                    <select
-                      className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                  <FormField label="Status">
+                    <SelectInput
                       value={formData.isActive.toString()}
                       onChange={(e) =>
                         setFormData({ ...formData, isActive: e.target.value === 'true' })
@@ -469,26 +468,23 @@ export default function ProductsPage() {
                     >
                       <option value="true">Active</option>
                       <option value="false">Inactive</option>
-                    </select>
-                  </div>
+                    </SelectInput>
+                  </FormField>
                 )}
               </div>
-              <div className="mt-6 flex gap-4 border-t-[0.5px] border-[#333] pt-4">
-                <button
-                  className="text-primary flex-1 rounded-lg border-[0.5px] border-[#444] py-2.5 font-semibold transition-all hover:bg-[#252525]"
-                  onClick={() => setIsModalOpen(false)}
+              <div className="border-border mt-6 flex gap-3 border-t pt-4">
+                <Button
                   type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
                 >
                   Cancel
-                </button>
-                <button
-                  className="bg-primary text-background hover:bg-opacity-90 flex-1 rounded-lg py-2.5 font-semibold transition-all disabled:opacity-50"
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
-                </button>
+                </Button>
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving…' : editingId ? 'Update' : 'Create'}
+                </Button>
               </div>
             </form>
           </div>
