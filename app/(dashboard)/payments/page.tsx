@@ -62,7 +62,11 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('All');
+  const [customerFilter, setCustomerFilter] = useState(() =>
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('customerId') || 'All'
+      : 'All'
+  );
   const [modeFilter, setModeFilter] = useState('ALL');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');

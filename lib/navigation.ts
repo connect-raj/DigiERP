@@ -38,7 +38,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Finance',
-    items: [{ label: 'Payments', href: '/payments', icon: 'payments' }],
+    items: [
+      { label: 'Payments', href: '/payments', icon: 'payments' },
+      { label: 'Customer Ledger', href: '/ledger', icon: 'menu_book' },
+    ],
   },
 ];
 

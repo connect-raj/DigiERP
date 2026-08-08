@@ -54,7 +54,11 @@ export default function PurchasesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [vendorFilter, setVendorFilter] = useState('All');
+  const [vendorFilter, setVendorFilter] = useState(() =>
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('vendorId') || 'All'
+      : 'All'
+  );
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });

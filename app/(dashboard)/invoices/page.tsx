@@ -53,8 +53,16 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [customerFilter, setCustomerFilter] = useState(() =>
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('customerId') || 'All'
+      : 'All'
+  );
+  const [statusFilter, setStatusFilter] = useState(() =>
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('paymentStatus') || 'ALL'
+      : 'ALL'
+  );
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);

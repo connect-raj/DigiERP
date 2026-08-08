@@ -351,6 +351,54 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
+      {/* Smart-buttons: live stats linking to filtered lists */}
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href={`/invoices?customerId=${id}`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Open Invoices
+          </span>
+          <span className="text-on-surface font-mono text-lg font-semibold">
+            {invoices.filter((i) => i.paymentStatus !== 'PAID').length}
+          </span>
+        </Link>
+        <Link
+          href={`/customers/${id}/ledger`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Outstanding
+          </span>
+          <span className="text-status-error font-mono text-lg font-semibold">
+            {formatINR(outstanding)}
+          </span>
+        </Link>
+        {creditBalance > 0 && (
+          <Link
+            href={`/customers/${id}/ledger`}
+            className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+          >
+            <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+              On Account
+            </span>
+            <span className="text-accent-yellow font-mono text-lg font-semibold">
+              {formatINR(creditBalance)}
+            </span>
+          </Link>
+        )}
+        <Link
+          href={`/payments?customerId=${id}`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Payments
+          </span>
+          <span className="text-on-surface font-mono text-lg font-semibold">{payments.length}</span>
+        </Link>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column */}
         <div className="flex flex-col gap-6 lg:col-span-2">

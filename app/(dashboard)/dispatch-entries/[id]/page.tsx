@@ -2,6 +2,11 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { DetailCard } from '@/components/ui/DetailCard';
+import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
 
 type StockTransaction = {
   id: string;
@@ -52,18 +57,45 @@ type DispatchEntry = {
   stockTransactions?: StockTransaction[];
 };
 
+type PaymentAllocation = {
+  id: string;
+  amount: string | number;
+  createdAt: string;
+  payment: { id: string; mode: string; reference: string | null; date: string };
+};
+
+function formatINR(val: string | number) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(Number(val));
+}
+
+function formatDate(val: string) {
+  return new Date(val).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function dispatchStatus(entry: DispatchEntry): Status {
+  if (entry.isCancelled) return 'CANCELLED';
+  return entry.status === 'BILLED' ? 'INVOICED' : 'DISPATCHED';
+}
+
 export default function DispatchEntryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
 
   const [entry, setEntry] = useState<DispatchEntry | null>(null);
+  const [balanceDue, setBalanceDue] = useState<number | null>(null);
+  const [allocations, setAllocations] = useState<PaymentAllocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Accordion state
-  const [isStockImpactOpen, setIsStockImpactOpen] = useState(true);
-
-  // Cancel Dialog Modal State
+  const [isStockImpactOpen, setIsStockImpactOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
@@ -74,8 +106,22 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
       const data = await res.json();
       if (!res.ok || !data.data) {
         setError(data.error?.message || 'Failed to fetch dispatch entry details');
+        return;
+      }
+      const dispatch: DispatchEntry = data.data;
+      setEntry(dispatch);
+
+      // Pull the invoice's balance + allocations so the lifecycle shows payments.
+      if (dispatch.invoice?.id) {
+        const [invRes, allocRes] = await Promise.all([
+          fetch(`/api/invoices/${dispatch.invoice.id}`).then((r) => r.json()),
+          fetch(`/api/invoices/${dispatch.invoice.id}/payments`).then((r) => r.json()),
+        ]);
+        if (invRes.data) setBalanceDue(Number(invRes.data.balanceDue));
+        if (allocRes.data) setAllocations(allocRes.data);
       } else {
-        setEntry(data.data);
+        setBalanceDue(null);
+        setAllocations([]);
       }
     } catch (err) {
       console.error('Failed to load dispatch details', err);
@@ -86,22 +132,20 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDetails();
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCancelEntry = async () => {
     try {
       setCancelling(true);
-      const res = await fetch(`/api/dispatch-entries/${id}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(`/api/dispatch-entries/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
         alert(data.error?.message || 'Failed to cancel dispatch entry');
       } else {
         setIsCancelModalOpen(false);
-        fetchDetails(); // Reload data to show updated state
+        fetchDetails();
       }
     } catch (err) {
       console.error('Error cancelling entry', err);
@@ -111,30 +155,10 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
     }
   };
 
-  const handleGenerateInvoice = () => {
-    if (!entry) return;
-    router.push(`/invoices/new?dispatchEntryId=${entry.id}`);
-  };
-
-  // Indian format helper for currency
-  const formatINR = (val: string | number) => {
-    const num = Number(val);
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(num);
-  };
-
   if (loading) {
     return (
       <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
-        <div className="flex flex-col items-center gap-2">
-          <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-            progress_activity
-          </span>
-          <span>Loading dispatch entry details...</span>
-        </div>
+        <RegistrationMark size="lg" spinning />
       </div>
     );
   }
@@ -142,249 +166,226 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
   if (error || !entry) {
     return (
       <div className="text-on-surface-variant flex h-full flex-col items-center justify-center gap-4 p-12">
-        <span className="material-symbols-outlined text-[48px] text-red-400">error</span>
-        <div>
-          <h3 className="text-body-lg text-primary font-bold">Error Loading Dispatch Entry</h3>
-          <p className="text-body-sm text-on-surface-variant mt-1">
-            {error || 'Dispatch entry not found'}
-          </p>
-        </div>
-        <button
-          onClick={() => router.push('/dispatch-entries')}
-          className="bg-surface-container border-outline-variant text-primary text-body-sm rounded-lg border-[0.5px] px-4 py-2 transition-colors hover:bg-[#252525]"
-        >
-          Back to List
-        </button>
+        <span className="material-symbols-outlined text-status-error text-[48px]">error</span>
+        <p className="text-on-surface font-semibold">{error || 'Dispatch entry not found'}</p>
+        <Button variant="outline" size="sm" onClick={() => router.push('/dispatch-entries')}>
+          Back to list
+        </Button>
       </div>
     );
   }
 
+  const canGenerateInvoice = !entry.isCancelled && entry.status === 'PENDING_BILLING';
+  const canRecordPayment =
+    !entry.isCancelled && entry.status === 'BILLED' && (balanceDue ?? 0) > 0.005 && !!entry.invoice;
+
   return (
     <div className="flex flex-col gap-6 pb-12">
-      {/* Top Header / Actions */}
+      {/* In-page record header */}
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/dispatch-entries')}
-            className="bg-surface-container border-outline-variant flex h-9 w-9 items-center justify-center rounded-lg border-[0.5px] transition-colors hover:bg-[#252525]"
-          >
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="icon" onClick={() => router.push('/dispatch-entries')}>
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          </button>
+          </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-headline-md text-headline-md text-primary">
+              <h1 className="font-display text-on-surface text-xl font-semibold tracking-tight">
                 Challan #{entry.challanNo}
               </h1>
-              {entry.isCancelled ? (
-                <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-400 uppercase">
-                  Cancelled
-                </span>
-              ) : entry.status === 'BILLED' ? (
-                <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-xs font-semibold text-green-400 uppercase">
-                  Billed
-                </span>
-              ) : (
-                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-400 uppercase">
-                  Pending Billing
-                </span>
-              )}
+              <StatusPill status={dispatchStatus(entry)} />
             </div>
-            <p className="text-on-surface-variant text-body-sm mt-0.5">
-              Recorded on{' '}
-              {new Date(entry.entryDate).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+            <p className="text-on-surface-variant mt-0.5 text-sm">
+              Recorded {formatDate(entry.entryDate)}
             </p>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        {!entry.isCancelled && (
-          <div className="flex items-center gap-3">
-            {entry.status === 'PENDING_BILLING' ? (
-              <>
-                <button
-                  onClick={() => setIsCancelModalOpen(true)}
-                  className="text-body-sm rounded-lg border border-red-500/30 px-4 py-2 font-semibold text-red-400 transition-colors hover:bg-red-500/10 active:scale-95"
-                >
-                  Cancel Entry
-                </button>
-                <button
-                  onClick={handleGenerateInvoice}
-                  className="bg-secondary-container hover:bg-secondary-container/85 text-on-secondary-container text-body-sm rounded-lg px-4 py-2 font-semibold transition-colors active:scale-95"
-                >
-                  Generate Invoice
-                </button>
-              </>
-            ) : (
-              <span className="text-body-sm text-on-surface-variant">
-                No modifications allowed (Invoiced)
-              </span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {canGenerateInvoice && (
+            <>
+              <Button variant="destructive" size="sm" onClick={() => setIsCancelModalOpen(true)}>
+                Cancel Entry
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => router.push(`/invoices/new?dispatchEntryId=${entry.id}`)}
+              >
+                Generate Invoice
+              </Button>
+            </>
+          )}
+          {canRecordPayment && (
+            <Button size="sm" onClick={() => router.push(`/invoices/${entry.invoice!.id}`)}>
+              Record Payment
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Invoice Card Link if Billed */}
-      {entry.status === 'BILLED' && entry.invoice && (
-        <div className="border-outline-variant flex items-center justify-between rounded-r-xl border-[0.5px] border-l-4 border-green-500 border-l-green-500 bg-[#1e1e1e] p-4">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[24px] text-green-400">
-              receipt_long
-            </span>
-            <div>
-              <h5 className="text-primary font-bold">Invoiced as #{entry.invoice.invoiceNo}</h5>
-              <p className="text-body-sm text-on-surface-variant">
-                Invoice generated on{' '}
-                {new Date(entry.invoice.date).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}{' '}
-                | Status: <span className="font-semibold">{entry.invoice.paymentStatus}</span>
-              </p>
+      {/* Lifecycle: linked records */}
+      <DetailCard title="Lifecycle">
+        <ol className="flex flex-col gap-3">
+          <li className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-accent-cyan text-[22px]">
+                local_shipping
+              </span>
+              <div>
+                <p className="text-on-surface text-sm font-medium">
+                  Dispatched · #{entry.challanNo}
+                </p>
+                <p className="text-on-surface-variant text-xs">{formatDate(entry.date)}</p>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={() => router.push(`/invoices/${entry.invoice?.id}`)}
-            className="bg-surface-container border-outline-variant text-body-sm rounded-lg border-[0.5px] px-4 py-2 font-semibold transition-colors hover:bg-[#252525]"
-          >
-            View Invoice
-          </button>
-        </div>
-      )}
+            <StatusPill status={dispatchStatus(entry)} />
+          </li>
 
-      {/* Info Panel: Customer vs Dispatch details */}
+          {entry.invoice ? (
+            <li className="border-border flex items-center justify-between gap-4 border-t pt-3">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-accent-magenta text-[22px]">
+                  receipt_long
+                </span>
+                <div>
+                  <p className="text-on-surface text-sm font-medium">
+                    Invoiced · {entry.invoice.invoiceNo}
+                  </p>
+                  <p className="text-on-surface-variant text-xs">
+                    {formatDate(entry.invoice.date)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusPill status={entry.invoice.paymentStatus as Status} />
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/invoices/${entry.invoice.id}`}>View</Link>
+                </Button>
+              </div>
+            </li>
+          ) : (
+            !entry.isCancelled && (
+              <li className="border-border text-on-surface-variant flex items-center gap-3 border-t pt-3 text-sm">
+                <span className="material-symbols-outlined text-[22px]">receipt_long</span>
+                Not yet invoiced.
+              </li>
+            )
+          )}
+
+          {entry.invoice && (
+            <li className="border-border border-t pt-3">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="material-symbols-outlined text-accent-yellow text-[22px]">
+                  payments
+                </span>
+                <p className="text-on-surface text-sm font-medium">
+                  Payments{' '}
+                  {balanceDue != null && balanceDue > 0.005 && (
+                    <span className="text-status-error font-mono text-xs">
+                      · {formatINR(balanceDue)} due
+                    </span>
+                  )}
+                </p>
+              </div>
+              {allocations.length === 0 ? (
+                <p className="text-on-surface-variant pl-9 text-xs">
+                  No payments allocated to this invoice yet.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-1.5 pl-9">
+                  {allocations.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between text-sm">
+                      <Link
+                        href={`/payments/${a.payment.id}`}
+                        className="text-on-surface-variant hover:text-on-surface transition-colors"
+                      >
+                        {a.payment.mode.replace('_', ' ')}
+                        {a.payment.reference ? ` · ${a.payment.reference}` : ''} ·{' '}
+                        {formatDate(a.createdAt)}
+                      </Link>
+                      <span className="font-mono">{formatINR(a.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          )}
+        </ol>
+      </DetailCard>
+
+      {/* Customer + Dispatch details */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* Customer Details */}
-        <div className="bg-surface-container border-outline-variant rounded-xl border-[0.5px] p-6">
-          <h3 className="text-body-lg text-primary mb-4 border-b border-[#2e2e2e] pb-3 font-bold">
-            Customer Details
-          </h3>
-          <div className="text-body-md text-on-surface flex flex-col gap-3">
+        <DetailCard title="Customer">
+          <dl className="flex flex-col gap-3 text-sm">
             <div>
-              <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                Firm Name
-              </span>
-              <span className="text-primary text-body-lg font-semibold">
-                {entry.customer.firmName}
-              </span>
-            </div>
-            <div>
-              <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                Billing Address
-              </span>
-              {/* Address detail placeholder */}
-              <span className="text-on-surface-variant">Gujarat, India</span>
+              <dt className="text-on-surface-variant text-xs">Firm Name</dt>
+              <dd>
+                <Link
+                  href={`/customers/${entry.customer.id}`}
+                  className="text-on-surface font-medium hover:underline"
+                >
+                  {entry.customer.firmName}
+                </Link>
+              </dd>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                  GSTIN
-                </span>
-                <span className="text-primary font-mono">
-                  {entry.customer.gstin || 'Unregistered'}
-                </span>
+                <dt className="text-on-surface-variant text-xs">GSTIN</dt>
+                <dd className="font-mono">{entry.customer.gstin || 'Unregistered'}</dd>
               </div>
               <div>
-                <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                  State
-                </span>
-                <span>{entry.customer.state}</span>
+                <dt className="text-on-surface-variant text-xs">State</dt>
+                <dd>{entry.customer.state}</dd>
               </div>
             </div>
-          </div>
-        </div>
+          </dl>
+        </DetailCard>
 
-        {/* Dispatch Details */}
-        <div className="bg-surface-container border-outline-variant rounded-xl border-[0.5px] p-6">
-          <h3 className="text-body-lg text-primary mb-4 border-b border-[#2e2e2e] pb-3 font-bold">
-            Dispatch Details
-          </h3>
-          <div className="text-body-md text-on-surface flex flex-col gap-3">
+        <DetailCard title="Dispatch">
+          <dl className="flex flex-col gap-3 text-sm">
             <div>
-              <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                Place of Dispatch
-              </span>
-              <span className="text-primary font-semibold">{entry.place}</span>
+              <dt className="text-on-surface-variant text-xs">Place of Dispatch</dt>
+              <dd className="font-medium">{entry.place}</dd>
             </div>
             <div>
-              <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                Transport
-              </span>
-              <span>{entry.transport || 'Self Delivery / Local pickup'}</span>
+              <dt className="text-on-surface-variant text-xs">Transport</dt>
+              <dd>{entry.transport || 'Self delivery / local pickup'}</dd>
             </div>
             {entry.transportAmount != null && Number(entry.transportAmount) > 0 && (
               <div>
-                <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                  Transport Amount
-                </span>
-                <span className="text-primary font-semibold">
-                  {formatINR(entry.transportAmount)}
-                </span>
+                <dt className="text-on-surface-variant text-xs">Transport Amount</dt>
+                <dd className="font-mono">{formatINR(entry.transportAmount)}</dd>
               </div>
             )}
             <div>
-              <span className="text-on-surface-variant text-body-sm mb-0.5 block font-medium">
-                Dispatch Date
-              </span>
-              <span className="text-secondary font-semibold">
-                {new Date(entry.date).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </span>
+              <dt className="text-on-surface-variant text-xs">Dispatch Date</dt>
+              <dd>{formatDate(entry.date)}</dd>
             </div>
-          </div>
-        </div>
+          </dl>
+        </DetailCard>
       </div>
 
-      {/* Read-Only Line Items Table */}
-      <div className="bg-surface-container border-outline-variant rounded-xl border-[0.5px] p-6">
-        <h3 className="text-body-lg text-primary mb-4 border-b border-[#2e2e2e] pb-3 font-bold">
-          Line Items
-        </h3>
+      {/* Line items */}
+      <DetailCard title="Line Items" contentClassName="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
+          <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-outline-variant/40 border-b-[0.5px] pb-2">
-                <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 tracking-wider uppercase">
-                  Product
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 text-right tracking-wider uppercase">
-                  Quantity
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant pr-4 pb-3 text-right tracking-wider uppercase">
-                  Price
-                </th>
-                <th className="font-label-caps text-label-caps text-on-surface-variant pb-3 text-right tracking-wider uppercase">
-                  Line Total
-                </th>
+              <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                <th className="px-5 py-3">Product</th>
+                <th className="px-5 py-3 text-right">Quantity</th>
+                <th className="px-5 py-3 text-right">Price</th>
+                <th className="px-5 py-3 text-right">Line Total</th>
               </tr>
             </thead>
-            <tbody className="divide-outline-variant/20 divide-y">
+            <tbody className="divide-border divide-y">
               {entry.items.map((item) => (
-                <tr key={item.id} className="py-3">
-                  <td className="py-3 pr-4">
-                    <span className="text-body-md text-primary block font-semibold">
-                      {item.productName}
-                    </span>
-                    <span className="text-on-surface-variant text-[11px]">
-                      Category: {item.categoryName}
-                    </span>
+                <tr key={item.id}>
+                  <td className="px-5 py-3">
+                    <span className="text-on-surface block font-medium">{item.productName}</span>
+                    <span className="text-on-surface-variant text-xs">{item.categoryName}</span>
                   </td>
-                  <td className="font-data-tabular py-3 pr-4 text-right font-medium">
-                    {Number(item.quantity)} LTR
-                  </td>
-                  <td className="font-data-tabular py-3 pr-4 text-right font-medium">
-                    {formatINR(item.price)}
-                  </td>
-                  <td className="text-primary font-data-tabular py-3 text-right font-semibold">
+                  <td className="px-5 py-3 text-right font-mono">{Number(item.quantity)}</td>
+                  <td className="px-5 py-3 text-right font-mono">{formatINR(item.price)}</td>
+                  <td className="px-5 py-3 text-right font-mono font-semibold">
                     {formatINR(item.lineTotal)}
                   </td>
                 </tr>
@@ -392,151 +393,110 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
             </tbody>
           </table>
         </div>
-
-        {/* Summary Block */}
-        <div className="mt-6 flex flex-col items-end gap-2 border-t border-[#2e2e2e] pt-6 text-right">
+        <div className="border-border flex flex-col items-end gap-1 border-t px-5 py-4">
           {entry.transportAmount != null && Number(entry.transportAmount) > 0 && (
-            <div className="text-body-sm text-on-surface-variant">
-              Transport:{' '}
-              <span className="text-primary font-semibold">{formatINR(entry.transportAmount)}</span>
+            <div className="text-on-surface-variant text-sm">
+              Transport: <span className="font-mono">{formatINR(entry.transportAmount)}</span>
             </div>
           )}
-          <div className="my-1 h-[1px] w-48 bg-[#2e2e2e]"></div>
-          <div className="text-body-md text-on-surface font-semibold">
+          <div className="text-on-surface text-sm">
             Grand Total:{' '}
-            <span className="font-data-tabular text-secondary text-headline-sm mt-1 block font-bold">
-              {formatINR(entry.totalAmount)}
-            </span>
+            <span className="font-mono text-lg font-bold">{formatINR(entry.totalAmount)}</span>
           </div>
         </div>
-      </div>
+      </DetailCard>
 
-      {/* Stock Impact Section */}
+      {/* Stock impact */}
       {entry.stockTransactions && entry.stockTransactions.length > 0 && (
-        <div className="bg-surface-container border-outline-variant overflow-hidden rounded-xl border-[0.5px]">
-          <button
-            onClick={() => setIsStockImpactOpen((prev) => !prev)}
-            className="flex w-full items-center justify-between p-6 transition-colors hover:bg-[#252525]"
-          >
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary text-[22px]">
-                inventory
+        <DetailCard
+          title="Stock Impact"
+          headerAside={
+            <button
+              onClick={() => setIsStockImpactOpen((p) => !p)}
+              className="text-on-surface-variant hover:text-on-surface"
+            >
+              <span className="material-symbols-outlined">
+                {isStockImpactOpen ? 'expand_less' : 'expand_more'}
               </span>
-              <h3 className="text-body-lg text-primary font-bold">Stock Impact Details</h3>
-            </div>
-            <span className="material-symbols-outlined text-on-surface-variant">
-              {isStockImpactOpen ? 'expand_less' : 'expand_more'}
-            </span>
-          </button>
-          {isStockImpactOpen && (
-            <div className="border-t border-[#2e2e2e] px-6 pt-4 pb-6">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-[#2e2e2e] pb-2">
-                      <th className="font-label-caps text-label-caps text-on-surface-variant pb-2">
-                        Product
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant pb-2 text-right">
-                        Qty Change
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant pb-2 text-right">
-                        Stock Before
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant pb-2 text-right">
-                        Stock After
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant pb-2">
-                        Reason
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2e2e2e]/50">
-                    {entry.stockTransactions.map((txn) => (
-                      <tr key={txn.id} className="py-2">
-                        <td className="text-primary py-2.5 font-semibold">{txn.productName}</td>
-                        <td
-                          className={`font-data-tabular py-2.5 text-right font-semibold ${
-                            Number(txn.changeQty) < 0 ? 'text-red-400' : 'text-green-400'
-                          }`}
-                        >
-                          {Number(txn.changeQty) > 0 ? '+' : ''}
-                          {Number(txn.changeQty)} LTR
-                        </td>
-                        <td className="text-on-surface-variant font-data-tabular py-2.5 text-right">
-                          {Number(txn.stockBefore)} LTR
-                        </td>
-                        <td className="text-primary font-data-tabular py-2.5 text-right">
-                          {Number(txn.stockAfter)} LTR
-                        </td>
-                        <td className="py-2.5">
-                          <span className="text-on-surface-variant rounded bg-[#2a2a2a] px-2 py-0.5 text-[11px] font-semibold uppercase">
-                            {txn.reason}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+            </button>
+          }
+          contentClassName={isStockImpactOpen ? 'p-0' : 'hidden'}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                  <th className="px-5 py-3">Product</th>
+                  <th className="px-5 py-3 text-right">Qty Change</th>
+                  <th className="px-5 py-3 text-right">Before</th>
+                  <th className="px-5 py-3 text-right">After</th>
+                  <th className="px-5 py-3">Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {entry.stockTransactions.map((txn) => (
+                  <tr key={txn.id}>
+                    <td className="px-5 py-3 font-medium">{txn.productName}</td>
+                    <td
+                      className={`px-5 py-3 text-right font-mono ${Number(txn.changeQty) < 0 ? 'text-status-error' : 'text-status-success'}`}
+                    >
+                      {Number(txn.changeQty) > 0 ? '+' : ''}
+                      {Number(txn.changeQty)}
+                    </td>
+                    <td className="text-on-surface-variant px-5 py-3 text-right font-mono">
+                      {Number(txn.stockBefore)}
+                    </td>
+                    <td className="px-5 py-3 text-right font-mono">{Number(txn.stockAfter)}</td>
+                    <td className="px-5 py-3">
+                      <span className="bg-surface-container-high text-on-surface-variant rounded px-2 py-0.5 text-[11px] font-medium uppercase">
+                        {txn.reason}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DetailCard>
       )}
 
-      {/* Cancel Confirmation Dialog Modal */}
+      {/* Cancel confirmation */}
       {isCancelModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="animate-fade-in flex w-full max-w-md flex-col gap-4 rounded-xl border border-[#2e2e2e] bg-[#1f1f1f] p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-red-400">
-              <span className="material-symbols-outlined text-[32px]">warning</span>
-              <h3 className="text-headline-sm text-primary font-bold">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="border-border bg-surface-container flex w-full max-w-md flex-col gap-4 rounded-xl border p-6 shadow-2xl">
+            <div className="text-status-error flex items-center gap-3">
+              <span className="material-symbols-outlined text-[28px]">warning</span>
+              <h3 className="text-on-surface font-display text-lg font-semibold">
                 Cancel this dispatch entry?
               </h3>
             </div>
-
-            <p className="text-body-md text-on-surface-variant">
-              This will reverse the stock decrement. The following stock will be restored:
+            <p className="text-on-surface-variant text-sm">
+              This reverses the stock decrement. The following stock will be restored:
             </p>
-
-            {/* Restored items table/list */}
-            <div className="bg-surface-container-low flex flex-col gap-2 rounded-lg border border-[#2e2e2e] p-3">
+            <div className="border-border bg-surface-container-low flex flex-col gap-2 rounded-lg border p-3">
               {entry.items.map((item) => (
-                <div
-                  key={item.id}
-                  className="text-body-sm flex items-center justify-between font-medium"
-                >
-                  <span className="text-primary">{item.productName}</span>
-                  <span className="font-data-tabular flex items-center gap-1 font-semibold text-green-400">
-                    <span className="material-symbols-outlined text-[16px] text-green-400">
-                      arrow_upward
-                    </span>
-                    {Number(item.quantity)} LTR
-                  </span>
+                <div key={item.id} className="flex items-center justify-between text-sm">
+                  <span>{item.productName}</span>
+                  <span className="text-status-success font-mono">+{Number(item.quantity)}</span>
                 </div>
               ))}
             </div>
-
-            <p className="text-on-surface-variant/80 border-t border-[#2e2e2e] pt-3 text-[11px]">
-              <strong className="text-red-400">Warning:</strong> This action cannot be undone.
-              Restored stock will immediately be available for other dispatches.
+            <p className="text-on-surface-variant border-border border-t pt-3 text-xs">
+              <span className="text-status-error font-semibold">Warning:</span> This cannot be
+              undone.
             </p>
-
-            <div className="mt-2 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsCancelModalOpen(false)}
-                className="border-outline-variant text-on-surface text-body-sm rounded-lg border-[0.5px] px-4 py-2 font-semibold transition-colors hover:bg-[#252525]"
-                autoFocus
-              >
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsCancelModalOpen(false)}>
                 Keep Entry
-              </button>
-              <button
-                onClick={handleCancelEntry}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
                 disabled={cancelling}
-                className="text-body-sm flex items-center gap-1 rounded-lg bg-[#ef4444] px-4 py-2 font-bold text-white transition-colors hover:bg-red-600"
+                onClick={handleCancelEntry}
               >
-                {cancelling ? 'Cancelling...' : 'Cancel Entry'}
-              </button>
+                {cancelling ? 'Cancelling…' : 'Cancel Entry'}
+              </Button>
             </div>
           </div>
         </div>

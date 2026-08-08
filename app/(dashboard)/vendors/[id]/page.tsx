@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 type VendorProduct = {
   id: string;
@@ -42,6 +43,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
   const [linkProductId, setLinkProductId] = useState('');
   const [linkPreferred, setLinkPreferred] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [purchaseCount, setPurchaseCount] = useState<number | null>(null);
 
   const fetchVendor = async () => {
     try {
@@ -83,6 +85,13 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
       })
       .catch((err) => console.error('Failed to fetch products', err));
   }, []);
+
+  useEffect(() => {
+    fetch(`/api/purchases?vendorId=${id}&limit=1`)
+      .then((res) => res.json())
+      .then((data) => setPurchaseCount(data.pagination?.total ?? 0))
+      .catch((err) => console.error('Failed to fetch purchase count', err));
+  }, [id]);
 
   const handleLink = async () => {
     if (!linkProductId) return;
@@ -169,6 +178,29 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
           <p className="text-on-surface-variant text-body-sm mt-0.5">
             {[vendor.contactPerson, vendor.state].filter(Boolean).join(' · ') || '—'}
           </p>
+        </div>
+      </div>
+
+      {/* Smart-buttons: live stats linking to filtered lists */}
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href={`/purchases?vendorId=${id}`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Purchases
+          </span>
+          <span className="text-on-surface font-mono text-lg font-semibold">
+            {purchaseCount ?? '—'}
+          </span>
+        </Link>
+        <div className="border-border bg-surface-container-low flex min-w-[140px] flex-col rounded-xl border px-4 py-3">
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Supplied Products
+          </span>
+          <span className="text-on-surface font-mono text-lg font-semibold">
+            {vendor.vendorProducts.length}
+          </span>
         </div>
       </div>
 
