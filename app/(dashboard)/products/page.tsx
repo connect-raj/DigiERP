@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/button';
@@ -339,14 +340,22 @@ export default function ProductsPage() {
         onSearchChange={setSearch}
         searchPlaceholder="Search products by name or category..."
         filters={
-          <FilterSelect value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </FilterSelect>
+          <>
+            <FilterSelect value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </FilterSelect>
+            <Button asChild variant="outline">
+              <Link href="/categories">
+                <span className="material-symbols-outlined text-[18px]">category</span>
+                Manage categories
+              </Link>
+            </Button>
+          </>
         }
         actions={
           <Button onClick={openCreateModal}>
