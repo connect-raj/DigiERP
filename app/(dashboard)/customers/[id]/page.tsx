@@ -216,27 +216,36 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           fetch(`/api/customers/${id}/payments`),
         ]);
 
-      const custData = await custRes.json();
-      if (!custRes.ok || !custData.data) {
-        setError(custData.error?.message || 'Failed to load customer');
+      // The customer record is required; if it fails, surface the error.
+      const custData = custRes.ok ? await custRes.json() : null;
+      if (!custData?.data) {
+        setError(custData?.error?.message || 'Failed to load customer');
         return;
       }
       setCustomer(custData.data);
 
-      const pricesData = await pricesRes.json();
-      if (pricesData.data) setPrices(pricesData.data);
-
-      const historyData = await historyRes.json();
-      if (historyData.data) setPriceHistory(historyData.data.slice(0, 10));
-
-      const dispatchData = await dispatchRes.json();
-      if (dispatchData.data) setDispatchEntries(dispatchData.data.slice(0, 5));
-
-      const invoicesData = await invoicesRes.json();
-      if (invoicesData.data) setInvoices(invoicesData.data.slice(0, 5));
-
-      const paymentsData = await paymentsRes.json();
-      if (paymentsData.data) setPayments(paymentsData.data.slice(0, 5));
+      // Secondary sections degrade gracefully — a non-OK/non-JSON response for
+      // any of them must not crash the whole page.
+      if (pricesRes.ok) {
+        const pricesData = await pricesRes.json();
+        if (pricesData.data) setPrices(pricesData.data);
+      }
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        if (historyData.data) setPriceHistory(historyData.data.slice(0, 10));
+      }
+      if (dispatchRes.ok) {
+        const dispatchData = await dispatchRes.json();
+        if (dispatchData.data) setDispatchEntries(dispatchData.data.slice(0, 5));
+      }
+      if (invoicesRes.ok) {
+        const invoicesData = await invoicesRes.json();
+        if (invoicesData.data) setInvoices(invoicesData.data.slice(0, 5));
+      }
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        if (paymentsData.data) setPayments(paymentsData.data.slice(0, 5));
+      }
     } catch (err) {
       console.error('Failed to load customer detail', err);
       setError('Failed to load customer detail.');

@@ -73,11 +73,18 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
         fetch(`/api/purchases/${purchaseId}/payments`),
       ]);
 
-      const purchaseData = await purchaseRes.json();
-      const paymentsData = await paymentsRes.json();
-
-      if (purchaseRes.ok) setPurchase(purchaseData.data);
-      if (paymentsRes.ok) setPayments(paymentsData.data);
+      // Guard against non-JSON error responses (e.g. an HTML 4xx/5xx page):
+      // parse only when the request succeeded so a failure can't crash the page.
+      if (purchaseRes.ok) {
+        const purchaseData = await purchaseRes.json();
+        setPurchase(purchaseData.data);
+      }
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        setPayments(paymentsData.data ?? []);
+      } else {
+        console.error('Failed to fetch purchase payments', paymentsRes.status);
+      }
     } catch (error) {
       console.error('Failed to fetch purchase details', error);
     } finally {
@@ -86,8 +93,9 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-compiler/react-compiler, react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPurchaseData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchaseId]);
 
   const handleReceive = async () => {
