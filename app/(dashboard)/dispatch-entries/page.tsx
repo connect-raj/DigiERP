@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
@@ -58,17 +58,22 @@ function dispatchStatus(entry: DispatchEntry): Status {
   return entry.status === 'BILLED' ? 'INVOICED' : 'DISPATCHED';
 }
 
-export default function DispatchEntriesPage() {
+function DispatchEntriesContent() {
   const router = useRouter();
+  // Seed filters from the URL so deep links (e.g. the dashboard "Awaiting Invoicing"
+  // tile → ?status=PENDING_BILLING, or a customer's "View All" → ?customerId=…) land
+  // pre-filtered. useSearchParams is consistent across SSR + client navigation, unlike
+  // reading window.location in a useState initializer (which loses the value on refresh).
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get('status');
+  const customerParam = searchParams.get('customerId');
   const [entries, setEntries] = useState<DispatchEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_BILLING' | 'BILLED'>(() => {
-    if (typeof window === 'undefined') return 'ALL';
-    const s = new URLSearchParams(window.location.search).get('status');
-    return s === 'PENDING_BILLING' || s === 'BILLED' ? s : 'ALL';
-  });
-  const [customerFilter, setCustomerFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_BILLING' | 'BILLED'>(
+    statusParam === 'PENDING_BILLING' || statusParam === 'BILLED' ? statusParam : 'ALL'
+  );
+  const [customerFilter, setCustomerFilter] = useState(customerParam ?? 'ALL');
   const [showCancelled, setShowCancelled] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [fromDate, setFromDate] = useState('');
@@ -117,6 +122,18 @@ export default function DispatchEntriesPage() {
       setLoading(false);
     }
   };
+
+  // Re-seed filters whenever the URL query changes. Query-only navigation (e.g. clicking
+  // the dashboard "Awaiting Invoicing" tile) does NOT remount this page, so the useState
+  // initializers above run only once — this effect keeps the filters in sync with deep links.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStatusFilter(
+      statusParam === 'PENDING_BILLING' || statusParam === 'BILLED' ? statusParam : 'ALL'
+    );
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCustomerFilter(customerParam ?? 'ALL');
+  }, [statusParam, customerParam]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -309,5 +326,19 @@ export default function DispatchEntriesPage() {
         }
       />
     </div>
+  );
+}
+
+export default function DispatchEntriesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
+          Loading...
+        </div>
+      }
+    >
+      <DispatchEntriesContent />
+    </Suspense>
   );
 }

@@ -201,6 +201,18 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="flex items-center gap-2">
+          {!entry.isCancelled && (
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={`/api/dispatch-entries/${entry.id}/slip`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="material-symbols-outlined text-[18px]">print</span>
+                Print Slip
+              </a>
+            </Button>
+          )}
           {canGenerateInvoice && (
             <>
               <Button variant="destructive" size="sm" onClick={() => setIsCancelModalOpen(true)}>

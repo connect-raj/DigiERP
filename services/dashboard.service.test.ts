@@ -7,10 +7,12 @@ vi.mock('@/repositories/dashboard.repository', () => ({
     findSettings: vi.fn(),
     findInvoicesInRange: vi.fn(),
     sumPaymentsInRange: vi.fn(),
-    findVendorPayablesInRange: vi.fn(),
+    findVendorPayables: vi.fn(),
     findTopCategorySalesInRange: vi.fn(),
     findActiveProducts: vi.fn(),
     findAllCustomers: vi.fn(),
+    sumOnAccountCredit: vi.fn(),
+    findOpenInvoicesForAging: vi.fn(),
     findRecentDispatchEntries: vi.fn(),
     findRecentInvoices: vi.fn(),
     findRecentPayments: vi.fn(),
@@ -21,10 +23,12 @@ vi.mock('@/repositories/dashboard.repository', () => ({
 function mockEmptyRepo() {
   vi.spyOn(dashboardRepository, 'findInvoicesInRange').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'sumPaymentsInRange').mockResolvedValue(0);
-  vi.spyOn(dashboardRepository, 'findVendorPayablesInRange').mockResolvedValue([] as never);
+  vi.spyOn(dashboardRepository, 'findVendorPayables').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findTopCategorySalesInRange').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findActiveProducts').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findAllCustomers').mockResolvedValue([] as never);
+  vi.spyOn(dashboardRepository, 'sumOnAccountCredit').mockResolvedValue(0);
+  vi.spyOn(dashboardRepository, 'findOpenInvoicesForAging').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findRecentDispatchEntries').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findRecentInvoices').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findRecentPayments').mockResolvedValue([] as never);
@@ -85,7 +89,111 @@ describe('DashboardService', () => {
 
       const result = await dashboardService.getDashboard('month');
 
-      expect(result.revenue).toEqual({ invoiced: 1500, collected: 700 });
+      // findInvoicesInRange / sumPaymentsInRange return the same value for the current and
+      // previous period here, so both change percentages are 0.
+      expect(result.revenue).toEqual({
+        invoiced: 1500,
+        collected: 700,
+        invoicedChangePct: 0,
+        collectedChangePct: 0,
+      });
+    });
+
+    it('computes period-over-period change vs the immediately preceding period', async () => {
+      vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
+      mockEmptyRepo();
+      // First call = current period, second call = previous period (same-length window).
+      vi.spyOn(dashboardRepository, 'findInvoicesInRange')
+        .mockResolvedValueOnce([{ date: new Date('2026-07-05'), totalAmount: 1200 }] as never)
+        .mockResolvedValueOnce([{ date: new Date('2026-06-05'), totalAmount: 1000 }] as never);
+      vi.spyOn(dashboardRepository, 'sumPaymentsInRange')
+        .mockResolvedValueOnce(800)
+        .mockResolvedValueOnce(500);
+
+      const result = await dashboardService.getDashboard('month');
+
+      expect(result.revenue.invoiced).toBe(1200);
+      expect(result.revenue.collected).toBe(800);
+      expect(result.revenue.invoicedChangePct).toBe(20); // (1200-1000)/1000
+      expect(result.revenue.collectedChangePct).toBe(60); // (800-500)/500
+    });
+
+    it('returns null change when the previous period was zero', async () => {
+      vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
+      mockEmptyRepo();
+      vi.spyOn(dashboardRepository, 'findInvoicesInRange')
+        .mockResolvedValueOnce([{ date: new Date('2026-07-05'), totalAmount: 1200 }] as never)
+        .mockResolvedValueOnce([] as never);
+      vi.spyOn(dashboardRepository, 'sumPaymentsInRange')
+        .mockResolvedValueOnce(800)
+        .mockResolvedValueOnce(0);
+
+      const result = await dashboardService.getDashboard('month');
+
+      expect(result.revenue.invoicedChangePct).toBeNull();
+      expect(result.revenue.collectedChangePct).toBeNull();
+    });
+  });
+
+  describe('onAccountCredit', () => {
+    it('passes through the repository on-account total', async () => {
+      vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
+      mockEmptyRepo();
+      vi.spyOn(dashboardRepository, 'sumOnAccountCredit').mockResolvedValue(4200);
+
+      const result = await dashboardService.getDashboard('month');
+
+      expect(result.onAccountCredit).toBe(4200);
+    });
+  });
+
+  describe('receivablesAging', () => {
+    it('buckets open invoice balances by age, excludes settled/void, uses asOfDate for openings', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-15T00:00:00.000Z'));
+      vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
+      mockEmptyRepo();
+      vi.spyOn(dashboardRepository, 'findOpenInvoicesForAging').mockResolvedValue([
+        // 5 days old, unpaid -> 0-30 (1000)
+        { date: new Date('2026-07-10'), asOfDate: null, totalAmount: 1000, paymentAllocations: [] },
+        // 44 days old, 500 paid of 2000 -> 31-60 (1500)
+        {
+          date: new Date('2026-06-01'),
+          asOfDate: null,
+          totalAmount: 2000,
+          paymentAllocations: [{ amount: 500, payment: { status: 'ACTIVE' } }],
+        },
+        // fully paid -> excluded
+        {
+          date: new Date('2026-04-01'),
+          asOfDate: null,
+          totalAmount: 3000,
+          paymentAllocations: [{ amount: 3000, payment: { status: 'ACTIVE' } }],
+        },
+        // 136 days old, allocation belongs to a VOID payment so balance stands -> 60+ (800)
+        {
+          date: new Date('2026-03-01'),
+          asOfDate: null,
+          totalAmount: 800,
+          paymentAllocations: [{ amount: 200, payment: { status: 'VOID' } }],
+        },
+        // opening balance: asOfDate 1 day ago wins over old date -> 0-30 (400)
+        {
+          date: new Date('2026-01-01'),
+          asOfDate: new Date('2026-07-14'),
+          totalAmount: 400,
+          paymentAllocations: [],
+        },
+      ] as never);
+
+      const result = await dashboardService.getDashboard('month');
+
+      expect(result.receivablesAging).toEqual({
+        bucket0_30: 1400,
+        bucket31_60: 1500,
+        bucket60plus: 800,
+        total: 3700,
+      });
     });
   });
 
@@ -93,7 +201,7 @@ describe('DashboardService', () => {
     it('aggregates per vendor and excludes fully-paid purchases from the pending list', async () => {
       vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
       mockEmptyRepo();
-      vi.spyOn(dashboardRepository, 'findVendorPayablesInRange').mockResolvedValue([
+      vi.spyOn(dashboardRepository, 'findVendorPayables').mockResolvedValue([
         { vendorId: 'v1', vendorName: 'Vendor A', totalAmount: 1300, paidAmount: 200 },
         { vendorId: 'v2', vendorName: 'Vendor B', totalAmount: 500, paidAmount: 500 },
       ] as never);
@@ -287,6 +395,13 @@ describe('DashboardService', () => {
       expect(result.lowStock).toEqual([]);
       expect(result.creditHealth.breachedCustomers).toEqual([]);
       expect(result.recentActivity).toEqual([]);
+      expect(result.onAccountCredit).toBe(0);
+      expect(result.receivablesAging).toEqual({
+        bucket0_30: 0,
+        bucket31_60: 0,
+        bucket60plus: 0,
+        total: 0,
+      });
     });
   });
 });

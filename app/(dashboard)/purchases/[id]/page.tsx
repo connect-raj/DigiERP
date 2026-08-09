@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import RecordPaymentModal from '../_components/RecordPaymentModal';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
+import { DetailCard } from '@/components/ui/DetailCard';
+import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { Button } from '@/components/ui/button';
 
 type Purchase = {
   id: string;
@@ -138,8 +141,24 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     }
   };
 
-  if (loading) return <div className="text-on-surface-variant p-10">Loading...</div>;
-  if (!purchase) return <div className="text-on-surface-variant p-10">Purchase not found.</div>;
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center p-12">
+        <RegistrationMark size="lg" spinning />
+      </div>
+    );
+  }
+  if (!purchase) {
+    return (
+      <div className="text-on-surface-variant flex h-full flex-col items-center justify-center gap-4 p-12">
+        <span className="material-symbols-outlined text-status-error text-[48px]">error</span>
+        <p className="text-on-surface font-semibold">Purchase not found</p>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/purchases">Back to Purchases</Link>
+        </Button>
+      </div>
+    );
+  }
 
   const totalAmt = Number(purchase.totalAmount);
   const paidAmt = Number(purchase.paidAmount);
@@ -150,81 +169,58 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     <div className="flex h-full flex-col gap-6">
       {/* Detail Header */}
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div className="flex flex-col gap-1">
-          <div className="text-on-surface-variant font-body-sm flex items-center gap-2">
-            <Link href="/purchases" className="hover:text-primary transition-colors">
-              Purchases
+        <div className="flex items-center gap-3">
+          <Button asChild variant="outline" size="icon">
+            <Link href="/purchases">
+              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
             </Link>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-primary font-medium">{purchase.purchaseNo}</span>
-          </div>
-          <div className="mt-1 flex items-center gap-4">
-            <h1 className="font-headline-md text-headline-md text-primary">
+          </Button>
+          <div className="flex items-center gap-3">
+            <h1 className="font-display text-on-surface text-xl font-semibold tracking-tight">
               {purchase.purchaseNo}
             </h1>
-            {purchase.isCancelled ? (
-              <span className="bg-error/15 text-error rounded-full px-3 py-1 text-[12px] font-bold tracking-wider uppercase">
-                Cancelled
-              </span>
-            ) : (
-              <span
-                className={`rounded-full px-3 py-1 text-[12px] font-bold tracking-wider uppercase ${
-                  purchase.paymentStatus === 'PAID'
-                    ? 'bg-secondary/15 text-secondary'
-                    : purchase.paymentStatus === 'PARTIAL'
-                      ? 'bg-orange-400/15 text-orange-400'
-                      : 'bg-error/15 text-error'
-                }`}
-              >
-                {purchase.paymentStatus}
-              </span>
-            )}
+            <StatusPill
+              status={
+                purchase.isCancelled ? 'CANCELLED' : (purchase.paymentStatus as Status)
+              }
+            />
           </div>
         </div>
 
-        <div className="flex items-center gap-3 print:hidden">
-          <button
-            onClick={() => window.print()}
-            className="border-outline-variant text-on-surface hover:bg-surface-container-high font-body-md flex items-center gap-2 rounded-lg border-[0.5px] px-4 py-2 font-medium transition-colors"
-          >
+        <div className="flex items-center gap-2 print:hidden">
+          <Button variant="outline" size="sm" onClick={() => window.print()}>
             <span className="material-symbols-outlined text-[18px]">download</span>
             Download PDF
-          </button>
+          </Button>
           {!purchase.isCancelled && !purchase.receivedDate && (
-            <button
-              onClick={handleReceive}
-              className="bg-surface-variant text-on-surface-variant font-body-md hover:bg-surface-container-highest flex items-center gap-2 rounded-lg px-4 py-2 font-semibold shadow-sm transition-all"
-            >
+            <Button variant="secondary" size="sm" onClick={handleReceive}>
               <span className="material-symbols-outlined text-[18px]">check_circle</span>
               Mark Received
-            </button>
+            </Button>
           )}
           {!purchase.isCancelled && pendingAmt > 0 && (
-            <button
-              onClick={() => setIsPaymentModalOpen(true)}
-              className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold shadow-sm transition-all hover:opacity-90"
-            >
+            <Button size="sm" onClick={() => setIsPaymentModalOpen(true)}>
               <span className="material-symbols-outlined text-[18px]">payments</span>
               Record Payment
-            </button>
+            </Button>
           )}
           {!purchase.isCancelled && (
             <div className="group relative ml-1">
-              <button className="border-outline-variant text-on-surface hover:bg-surface-container-high flex h-10 w-10 items-center justify-center rounded-lg border-[0.5px] transition-colors">
+              <Button variant="outline" size="icon">
                 <span className="material-symbols-outlined">more_vert</span>
-              </button>
+              </Button>
               <div className="absolute top-full right-0 z-10 hidden pt-2 group-hover:block">
-                <div className="flex w-48 flex-col rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 shadow-xl">
+                <div className="border-border bg-surface-container flex w-48 flex-col rounded-xl border p-1 shadow-xl">
                   <a
                     href={`mailto:${purchase.vendor.email || ''}?subject=Purchase Order ${purchase.purchaseNo}&body=Dear ${purchase.vendor.name},%0D%0A%0D%0APlease find attached the details for PO ${purchase.purchaseNo}.`}
-                    className="text-on-surface-variant hover:bg-surface-container-high hover:text-primary flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
+                    className="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">mail</span> Email Vendor
                   </a>
-                  <div className="bg-outline-variant/50 my-1 h-[0.5px] w-full"></div>
+                  <div className="bg-border my-1 h-px w-full"></div>
                   <button
                     onClick={handleCancel}
-                    className="hover:bg-error/10 text-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
+                    className="hover:bg-status-error/10 text-status-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">cancel</span> Cancel
                     Purchase
@@ -240,68 +236,50 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
         {/* Left Column - Main Details */}
         <div className="flex flex-col gap-6 lg:col-span-2">
           {/* Order Items Table */}
-          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant border-b-[0.5px] p-5">
-              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">inventory_2</span>
-                Ordered Items
-              </h2>
-            </div>
+          <DetailCard title="Ordered Items" contentClassName="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="bg-surface-container-low border-outline-variant border-b-[0.5px]">
-                    <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
-                      Product
-                    </th>
-                    <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
-                      Quantity
-                    </th>
-                    <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
-                      Unit Price
-                    </th>
-                    <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
-                      Tax
-                    </th>
-                    <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
-                      Total
-                    </th>
+                  <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                    <th className="px-5 py-3">Product</th>
+                    <th className="px-5 py-3 text-right">Quantity</th>
+                    <th className="px-5 py-3 text-right">Unit Price</th>
+                    <th className="px-5 py-3 text-right">Tax</th>
+                    <th className="px-5 py-3 text-right">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-outline-variant/30 divide-y">
+                <tbody className="divide-border divide-y">
                   {purchase.items.map((item) => {
                     const lTotal = Number(item.lineTotal);
                     const lTax = Number(item.cgst) + Number(item.sgst) + Number(item.igst);
                     const lPrice = Number(item.unitPrice);
                     const lQty = Number(item.quantity);
                     return (
-                      <tr key={item.id} className="transition-colors hover:bg-[#222]">
+                      <tr key={item.id} className="hover:bg-surface-container transition-colors">
                         <td className="px-5 py-4">
-                          <p className="text-body-md text-primary font-medium">
-                            {item.product.name}
-                          </p>
+                          <p className="text-on-surface font-medium">{item.product.name}</p>
                           <p className="text-on-surface-variant mt-0.5 text-[12px]">
                             HSN: {item.product.category.hsnCode || 'N/A'} | GST:{' '}
                             {item.product.category.gstRate}%
                           </p>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <span className="font-data-tabular text-body-md text-primary">
+                          <span className="text-on-surface font-mono">
                             {lQty} {item.product.unit}
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <span className="font-data-tabular text-body-md text-primary">
+                          <span className="text-on-surface font-mono">
                             ₹{lPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <span className="font-data-tabular text-body-md text-primary">
+                          <span className="text-on-surface font-mono">
                             ₹{lTax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <span className="font-data-tabular text-body-md text-primary font-semibold">
+                          <span className="text-on-surface font-mono font-semibold">
                             ₹{lTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         </td>
@@ -311,25 +289,21 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                 </tbody>
               </table>
             </div>
-          </div>
+          </DetailCard>
 
           {/* Payment History Timeline */}
-          <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-6">
-            <h2 className="font-title-md text-title-md text-primary mb-6 flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary">history</span>
-              Payment History
-            </h2>
-            <div className="relative ml-3 space-y-8 border-l border-[#333] pb-4">
+          <DetailCard title="Payment History">
+            <div className="border-border relative ml-3 space-y-8 border-l pb-4">
               {/* Payment Records */}
               {payments.map((payment) => (
                 <div key={payment.id} className="relative pl-8">
-                  <div className="bg-secondary absolute top-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-[#1c1c1c]"></div>
+                  <div className="bg-accent-cyan absolute top-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-surface-container-low"></div>
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-body-md text-primary font-medium">
+                      <span className="text-on-surface font-medium">
                         Payment Recorded
                       </span>
-                      <span className="font-data-tabular text-secondary text-[15px] font-bold">
+                      <span className="font-mono text-accent-cyan text-[15px] font-bold">
                         + ₹
                         {Number(payment.amount).toLocaleString('en-IN', {
                           minimumFractionDigits: 2,
@@ -352,7 +326,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                       </span>
                       {payment.reference && (
                         <>
-                          <div className="h-3 w-[1px] bg-[#444]"></div>
+                          <div className="h-3 w-px bg-border"></div>
                           <span className="font-data-tabular text-on-surface-variant">
                             Ref: {payment.reference}
                           </span>
@@ -366,10 +340,10 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
               {/* Order Received Event */}
               {purchase.receivedDate && (
                 <div className="relative pl-8">
-                  <div className="bg-primary absolute top-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-[#1c1c1c]"></div>
+                  <div className="bg-on-surface absolute top-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-surface-container-low"></div>
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-body-md text-primary font-medium">Order Received</span>
+                      <span className="text-on-surface font-medium">Order Received</span>
                     </div>
                     <p className="text-on-surface-variant text-[13px]">
                       {new Date(purchase.receivedDate).toLocaleDateString('en-IN', {
@@ -384,13 +358,13 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
 
               {/* Order Created Event */}
               <div className="relative pl-8">
-                <div className="absolute top-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-[#1c1c1c] bg-[#555]"></div>
+                <div className="absolute top-1.5 -left-1.5 h-3 w-3 rounded-full border-2 border-surface-container-low bg-outline"></div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-body-md text-primary font-medium">
+                    <span className="text-on-surface font-medium">
                       Purchase Order Created
                     </span>
-                    <span className="font-data-tabular text-primary text-[15px] font-bold">
+                    <span className="font-mono text-on-surface text-[15px] font-bold">
                       ₹{totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -415,31 +389,30 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                 </div>
               </div>
             </div>
-          </div>
+          </DetailCard>
         </div>
 
         {/* Right Column - Financials & Vendor Details */}
         <div className="flex flex-col gap-6">
           {/* Financial Summary */}
-          <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-6">
-            <h2 className="font-title-md text-title-md text-primary mb-5">Financial Summary</h2>
+          <DetailCard title="Financial Summary">
             <div className="space-y-4">
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-on-surface-variant">Subtotal</span>
-                <span className="text-primary font-data-tabular">
+                <span className="text-on-surface font-mono">
                   ₹{subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-on-surface-variant">Total Tax (GST)</span>
-                <span className="text-primary font-data-tabular">
+                <span className="text-on-surface font-mono">
                   ₹{Number(purchase.totalGst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <div className="border-outline-variant my-1 h-[0.5px] w-full bg-[#333]"></div>
+              <div className="bg-border my-1 h-px w-full"></div>
               <div className="flex items-center justify-between">
-                <span className="font-body-md text-primary font-bold">Grand Total</span>
-                <span className="font-data-tabular text-primary text-[18px] font-bold">
+                <span className="text-on-surface font-bold">Grand Total</span>
+                <span className="text-on-surface font-mono text-[18px] font-bold">
                   ₹{totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -447,46 +420,46 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
               <div className="bg-surface-container-lowest mt-2 rounded-xl p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-on-surface-variant text-[13px]">Amount Paid</span>
-                  <span className="font-data-tabular text-secondary font-semibold">
+                  <span className="text-status-success font-mono font-semibold">
                     ₹{paidAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-on-surface-variant text-[13px]">Pending Balance</span>
-                  <span className="font-data-tabular font-semibold text-orange-400">
+                  <span className="text-status-warning font-mono font-semibold">
                     ₹{pendingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[#222]">
+                <div className="bg-surface-container-highest mt-4 h-2 w-full overflow-hidden rounded-full">
                   <div
-                    className="bg-secondary h-full rounded-full transition-all duration-1000"
+                    className="bg-status-success h-full rounded-full transition-all duration-1000"
                     style={{ width: `${totalAmt > 0 ? (paidAmt / totalAmt) * 100 : 0}%` }}
                   ></div>
                 </div>
               </div>
             </div>
-          </div>
+          </DetailCard>
 
           {/* Vendor Details */}
-          <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="font-title-md text-title-md text-primary">Vendor Info</h2>
+          <DetailCard
+            title="Vendor Info"
+            headerAside={
               <Link
-                href={`/vendors`}
-                className="text-secondary hover:text-primary text-[13px] font-medium transition-colors"
+                href={`/vendors/${purchase.vendor.id}`}
+                className="text-accent-cyan hover:text-on-surface text-[13px] font-medium transition-colors"
               >
                 View Profile
               </Link>
-            </div>
-
+            }
+          >
             <div className="mb-6 flex items-start gap-4">
-              <div className="bg-surface-variant text-primary flex h-12 w-12 items-center justify-center rounded-xl text-[18px] font-bold">
+              <div className="bg-surface-container-highest text-on-surface flex h-12 w-12 items-center justify-center rounded-xl text-[18px] font-bold">
                 {purchase.vendor.name.substring(0, 2).toUpperCase()}
               </div>
               <div>
-                <h3 className="font-body-md text-primary font-semibold">{purchase.vendor.name}</h3>
+                <h3 className="text-on-surface font-semibold">{purchase.vendor.name}</h3>
                 <p className="text-on-surface-variant mt-0.5 text-[13px]">
                   {purchase.vendor.address}
                 </p>
@@ -496,18 +469,18 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
             <div className="space-y-4 text-[13px]">
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">call</span>
-                <span className="text-primary">{purchase.vendor.phone}</span>
+                <span className="text-on-surface">{purchase.vendor.phone}</span>
               </div>
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">mail</span>
-                <span className="text-primary">{purchase.vendor.email || 'N/A'}</span>
+                <span className="text-on-surface">{purchase.vendor.email || 'N/A'}</span>
               </div>
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                <span className="text-primary">Inv: {purchase.vendorInvoiceNo}</span>
+                <span className="text-on-surface">Inv: {purchase.vendorInvoiceNo}</span>
               </div>
             </div>
-          </div>
+          </DetailCard>
         </div>
       </div>
 

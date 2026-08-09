@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma';
 import { Prisma, InvoiceType, RecordStatus } from '@prisma/client';
 import { PeriodRange } from '@/lib/period';
-import { getCustomerPendingTotal } from '@/lib/balance';
+import { getCustomerPendingTotal, round2 } from '@/lib/balance';
 
 // Revenue/activity reflect real STANDARD, non-voided sales only — OPENING_BALANCE is a
 // migration construct and VOID rows must never count.
@@ -30,12 +30,14 @@ export class DashboardRepository {
     return Number(result._sum.amount ?? 0);
   }
 
+  // Vendor payables is an all-time running balance (total currently owed), so it is
+  // deliberately NOT scoped to the dashboard period — it stays constant when the
+  // This Month/This FY toggle changes, mirroring the customer Outstanding figure.
   // isCancelled purchases don't represent a real payable, so they're excluded here.
-  async findVendorPayablesInRange(range: PeriodRange) {
+  async findVendorPayables() {
     const grouped = await prisma.purchase.groupBy({
       by: ['vendorId'],
       where: {
-        date: { gte: range.start, lt: range.end },
         isCancelled: false,
       },
       _sum: { totalAmount: true, paidAmount: true },
@@ -104,6 +106,42 @@ export class DashboardRepository {
         currentStock: true,
         lowerStockLimit: true,
         category: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  // Unallocated on-account credit across ALL customers = SUM(ACTIVE payment amounts)
+  // − SUM(allocations directed at an invoice from ACTIVE payments). This mirrors
+  // getPaymentOnAccount() summed over every payment, so it also captures unallocated
+  // remainders that were never written as an explicit null-invoiceId allocation row.
+  // Never period-scoped — it's a live balance.
+  async sumOnAccountCredit() {
+    const [payments, directed] = await Promise.all([
+      prisma.payment.aggregate({
+        where: { status: RecordStatus.ACTIVE },
+        _sum: { amount: true },
+      }),
+      prisma.paymentAllocation.aggregate({
+        where: { invoiceId: { not: null }, payment: { status: RecordStatus.ACTIVE } },
+        _sum: { amount: true },
+      }),
+    ]);
+    const total = Number(payments._sum.amount ?? 0) - Number(directed._sum.amount ?? 0);
+    return Math.max(0, round2(total));
+  }
+
+  // Every ACTIVE invoice (STANDARD + OPENING_BALANCE) with the allocation rows needed to
+  // derive its live balanceDue. Used to bucket receivables by age; never period-scoped.
+  async findOpenInvoicesForAging() {
+    return prisma.invoice.findMany({
+      where: { status: RecordStatus.ACTIVE },
+      select: {
+        date: true,
+        asOfDate: true,
+        totalAmount: true,
+        paymentAllocations: {
+          select: { amount: true, payment: { select: { status: true } } },
+        },
       },
     });
   }

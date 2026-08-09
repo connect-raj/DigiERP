@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import SalesChart from './_components/dashboard/SalesChart';
 import TopCategoryChart from './_components/dashboard/TopCategoryChart';
 import LowStockAlerts from './_components/dashboard/LowStockAlerts';
+import ReceivablesAging from './_components/dashboard/ReceivablesAging';
 import EmptyState from './_components/dashboard/EmptyState';
 import type { ActivityType, DashboardPeriod, DashboardResponse } from './_lib/dashboard-types';
 
@@ -39,16 +40,43 @@ const ACTIVITY_ROUTE: Record<ActivityType, string> = {
   purchase: '/purchases',
 };
 
+function ChangeIndicator({ changePct }: { changePct: number | null }) {
+  if (changePct == null) return null;
+  const flat = Math.abs(changePct) < 0.05;
+  const up = changePct > 0;
+  const icon = flat ? 'trending_flat' : up ? 'arrow_upward' : 'arrow_downward';
+  const toneClass = flat
+    ? 'text-on-surface-variant'
+    : up
+      ? 'text-status-success'
+      : 'text-status-error';
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium ${toneClass}`}
+      title="vs. previous period"
+    >
+      <span className="material-symbols-outlined text-[14px] leading-none">{icon}</span>
+      {Math.abs(changePct).toFixed(1)}%
+    </span>
+  );
+}
+
 function StatTile({
   label,
   value,
   tone = 'primary',
   href,
+  note,
+  changePct,
 }: {
   label: string;
   value: string;
   tone?: 'primary' | 'success' | 'error' | 'warning';
   href?: string;
+  /** Small caption clarifying scope, e.g. "as of today" for running balances. */
+  note?: string;
+  /** Period-over-period change; renders a small ↑/↓ indicator next to the value. */
+  changePct?: number | null;
 }) {
   const router = useRouter();
   const toneClass =
@@ -66,10 +94,20 @@ function StatTile({
         href ? 'hover:bg-surface-container cursor-pointer transition-colors' : ''
       }`}
     >
-      <p className="text-on-surface-variant mb-1 text-[11px] font-medium tracking-widest uppercase">
-        {label}
-      </p>
-      <p className={`font-mono text-xl font-semibold ${toneClass}`}>{value}</p>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+          {label}
+        </p>
+        {note && (
+          <span className="border-outline-variant text-on-surface-variant shrink-0 rounded-full border-[0.5px] px-2 py-0.5 text-[9px] font-medium tracking-wide uppercase">
+            {note}
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className={`font-mono text-xl font-semibold ${toneClass}`}>{value}</p>
+        {changePct !== undefined && <ChangeIndicator changePct={changePct} />}
+      </div>
     </div>
   );
 }
@@ -192,8 +230,8 @@ export default function DashboardPage() {
       {dashboard === null ? (
         error ? null : (
           <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
                 <StatTileSkeleton key={i} />
               ))}
             </div>
@@ -203,6 +241,11 @@ export default function DashboardPage() {
               </Card>
               <Card title="Top Categories" icon="bar_chart">
                 <ChartSkeleton />
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <Card title="Receivables Aging" icon="hourglass_bottom">
+                <ListSkeleton />
               </Card>
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -227,35 +270,47 @@ export default function DashboardPage() {
             refreshing ? 'opacity-60' : 'opacity-100'
           }`}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <StatTile
               label="Invoiced"
               value={formatINR(dashboard.revenue.invoiced)}
               href="/invoices"
+              changePct={dashboard.revenue.invoicedChangePct}
             />
             <StatTile
               label="Collected"
               value={formatINR(dashboard.revenue.collected)}
               tone="success"
               href="/payments"
+              changePct={dashboard.revenue.collectedChangePct}
             />
             <StatTile
               label="Vendor Payables"
               value={formatINR(dashboard.vendorPayables.total)}
               tone="error"
               href="/purchases?paymentStatus=UNPAID"
+              note="as of today"
             />
             <StatTile
               label="Outstanding (Customers)"
               value={formatINR(dashboard.creditHealth.totalOutstanding)}
               tone="error"
               href="/invoices?paymentStatus=UNPAID"
+              note="as of today"
+            />
+            <StatTile
+              label="On-Account Credit"
+              value={formatINR(dashboard.onAccountCredit)}
+              tone="warning"
+              href="/payments"
+              note="as of today"
             />
             <StatTile
               label="Awaiting Invoicing"
               value={pendingDispatch != null ? String(pendingDispatch) : '—'}
               tone="warning"
               href="/dispatch-entries?status=PENDING_BILLING"
+              note="as of today"
             />
           </div>
 
@@ -265,6 +320,12 @@ export default function DashboardPage() {
             </Card>
             <Card title="Top Categories" icon="bar_chart">
               <TopCategoryChart data={dashboard.topCategoryChart} />
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Receivables Aging" icon="hourglass_bottom">
+              <ReceivablesAging data={dashboard.receivablesAging} />
             </Card>
           </div>
 
@@ -280,7 +341,7 @@ export default function DashboardPage() {
                       className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
                     >
                       <button
-                        onClick={() => router.push('/vendors')}
+                        onClick={() => router.push(`/vendors/${v.vendorId}`)}
                         className="text-on-surface hover:text-primary text-body-md text-left transition-colors"
                       >
                         {v.vendorName}
@@ -337,7 +398,7 @@ export default function DashboardPage() {
                         {ACTIVITY_ICON[a.type]}
                       </span>
                       <button
-                        onClick={() => router.push(ACTIVITY_ROUTE[a.type])}
+                        onClick={() => router.push(`${ACTIVITY_ROUTE[a.type]}/${a.id}`)}
                         className="text-on-surface hover:text-primary text-body-md flex-1 text-left transition-colors"
                       >
                         {a.label}

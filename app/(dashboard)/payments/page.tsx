@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import RecordPaymentModal from './_components/RecordPaymentModal';
 import Pagination from '@/components/ui/Pagination';
@@ -55,18 +55,18 @@ function formatDate(val: string) {
   });
 }
 
-export default function PaymentsPage() {
+function PaymentsContent() {
   const router = useRouter();
+  // Seed the customer filter from the URL (customer detail → ?customerId), reliably across
+  // SSR / refresh / navigation rather than a one-shot window.location read.
+  const searchParams = useSearchParams();
+  const customerParam = searchParams.get('customerId');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState(() =>
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('customerId') || 'All'
-      : 'All'
-  );
+  const [customerFilter, setCustomerFilter] = useState(customerParam || 'All');
   const [modeFilter, setModeFilter] = useState('ALL');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -158,6 +158,12 @@ export default function PaymentsPage() {
       })
       .catch((error) => console.error('Failed to fetch customers', error));
   }, []);
+
+  // Re-seed the customer filter when the URL query changes (query-only nav doesn't remount).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCustomerFilter(customerParam || 'All');
+  }, [customerParam]);
 
   const fetchPayments = async () => {
     try {
@@ -356,5 +362,19 @@ export default function PaymentsPage() {
         onSuccess={fetchPayments}
       />
     </div>
+  );
+}
+
+export default function PaymentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
+          Loading...
+        </div>
+      }
+    >
+      <PaymentsContent />
+    </Suspense>
   );
 }

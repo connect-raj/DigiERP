@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
     settings: { findFirst: vi.fn() },
     invoice: { findMany: vi.fn() },
     payment: { findMany: vi.fn(), aggregate: vi.fn() },
+    paymentAllocation: { aggregate: vi.fn() },
     purchase: { findMany: vi.fn(), groupBy: vi.fn() },
     invoiceItem: { findMany: vi.fn(), groupBy: vi.fn() },
     product: { findMany: vi.fn() },
@@ -53,7 +54,7 @@ describe('DashboardRepository', () => {
     expect(result).toBe(500);
   });
 
-  it('findVendorPayablesInRange groups purchases by vendor, excluding cancelled ones', async () => {
+  it('findVendorPayables groups ALL non-cancelled purchases by vendor (not period-scoped)', async () => {
     vi.mocked(prisma.purchase.groupBy).mockResolvedValue([
       { vendorId: 'v1', _sum: { totalAmount: 100, paidAmount: 40 } },
     ] as never);
@@ -61,12 +62,12 @@ describe('DashboardRepository', () => {
       { id: 'v1', name: 'Vendor One' },
     ] as never);
 
-    const result = await dashboardRepository.findVendorPayablesInRange(range);
+    const result = await dashboardRepository.findVendorPayables();
 
     expect(prisma.purchase.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         by: ['vendorId'],
-        where: { date: { gte: range.start, lt: range.end }, isCancelled: false },
+        where: { isCancelled: false },
         _sum: { totalAmount: true, paidAmount: true },
       })
     );
@@ -93,6 +94,41 @@ describe('DashboardRepository', () => {
       })
     );
     expect(result).toEqual([{ categoryId: 'c1', categoryName: 'Category One', amount: 250 }]);
+  });
+
+  it('sumOnAccountCredit = ACTIVE payments − invoice-directed ACTIVE allocations, floored at 0', async () => {
+    vi.mocked(prisma.payment.aggregate).mockResolvedValue({ _sum: { amount: 10000 } } as never);
+    vi.mocked(prisma.paymentAllocation.aggregate).mockResolvedValue({
+      _sum: { amount: 7500 },
+    } as never);
+
+    const result = await dashboardRepository.sumOnAccountCredit();
+
+    expect(prisma.payment.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: 'ACTIVE' }, _sum: { amount: true } })
+    );
+    expect(prisma.paymentAllocation.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { invoiceId: { not: null }, payment: { status: 'ACTIVE' } },
+        _sum: { amount: true },
+      })
+    );
+    expect(result).toBe(2500);
+  });
+
+  it('findOpenInvoicesForAging returns ACTIVE invoices with allocation + payment status', async () => {
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
+    await dashboardRepository.findOpenInvoicesForAging();
+    expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: 'ACTIVE' },
+        select: expect.objectContaining({
+          paymentAllocations: {
+            select: { amount: true, payment: { select: { status: true } } },
+          },
+        }),
+      })
+    );
   });
 
   it('findActiveProducts only returns active products and includes category', async () => {

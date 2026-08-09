@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/button';
@@ -46,23 +46,22 @@ function formatDate(val: string) {
   });
 }
 
-export default function InvoicesPage() {
+function InvoicesContent() {
   const router = useRouter();
+  // Seed filters from the URL so deep links (dashboard "Outstanding" tile → ?paymentStatus,
+  // customer detail → ?customerId) land pre-filtered. useSearchParams is consistent across
+  // SSR + client navigation, unlike reading window.location in a useState initializer (which
+  // silently loses the filter on refresh/bookmark).
+  const searchParams = useSearchParams();
+  const customerParam = searchParams.get('customerId');
+  const statusParam = searchParams.get('paymentStatus');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState(() =>
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('customerId') || 'All'
-      : 'All'
-  );
-  const [statusFilter, setStatusFilter] = useState(() =>
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('paymentStatus') || 'ALL'
-      : 'ALL'
-  );
+  const [customerFilter, setCustomerFilter] = useState(customerParam || 'All');
+  const [statusFilter, setStatusFilter] = useState(statusParam || 'ALL');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
@@ -73,6 +72,15 @@ export default function InvoicesPage() {
     paid: 0,
     pendingCount: 0,
   });
+
+  // Re-seed filters when the URL query changes. Query-only navigation does not remount the
+  // page, so the initializers above run only once — this keeps filters in sync with deep links.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCustomerFilter(customerParam || 'All');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStatusFilter(statusParam || 'ALL');
+  }, [customerParam, statusParam]);
 
   useEffect(() => {
     // Filter dropdown needs the full list, not a paginated page.
@@ -350,5 +358,19 @@ export default function InvoicesPage() {
         }
       />
     </div>
+  );
+}
+
+export default function InvoicesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
+          Loading...
+        </div>
+      }
+    >
+      <InvoicesContent />
+    </Suspense>
   );
 }

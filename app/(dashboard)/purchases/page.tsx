@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
@@ -12,6 +12,14 @@ import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
 
 const PAGE_LIMIT = 20;
+
+/** Maps the ?paymentStatus= deep-link value to this page's title-case filter label. */
+function paymentStatusLabel(s: string | null): 'All' | 'Paid' | 'Partial' | 'Unpaid' {
+  if (s === 'PAID') return 'Paid';
+  if (s === 'PARTIAL') return 'Partial';
+  if (s === 'UNPAID') return 'Unpaid';
+  return 'All';
+}
 
 type Vendor = {
   id: string;
@@ -48,24 +56,18 @@ function formatDate(val: string) {
   });
 }
 
-export default function PurchasesPage() {
+function PurchasesContent() {
   const router = useRouter();
+  // Seed filters from the URL so deep links (dashboard "Vendor Payables" → ?paymentStatus,
+  // vendor detail → ?vendorId) land pre-filtered, reliably across SSR / refresh / navigation.
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get('paymentStatus');
+  const vendorParam = searchParams.get('vendorId');
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState(() => {
-    if (typeof window === 'undefined') return 'All';
-    const s = new URLSearchParams(window.location.search).get('paymentStatus');
-    if (s === 'PAID') return 'Paid';
-    if (s === 'PARTIAL') return 'Partial';
-    if (s === 'UNPAID') return 'Unpaid';
-    return 'All';
-  });
-  const [vendorFilter, setVendorFilter] = useState(() =>
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('vendorId') || 'All'
-      : 'All'
-  );
+  const [statusFilter, setStatusFilter] = useState<string>(paymentStatusLabel(statusParam));
+  const [vendorFilter, setVendorFilter] = useState(vendorParam || 'All');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
@@ -126,6 +128,14 @@ export default function PurchasesPage() {
     // eslint-disable-next-line
     fetchVendors();
   }, []);
+
+  // Re-seed filters when the URL query changes (query-only navigation doesn't remount the page).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStatusFilter(paymentStatusLabel(statusParam));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVendorFilter(vendorParam || 'All');
+  }, [statusParam, vendorParam]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -282,5 +292,19 @@ export default function PurchasesPage() {
         }
       />
     </div>
+  );
+}
+
+export default function PurchasesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
+          Loading...
+        </div>
+      }
+    >
+      <PurchasesContent />
+    </Suspense>
   );
 }
