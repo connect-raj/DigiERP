@@ -1,11 +1,20 @@
 import { NextRequest } from 'next/server';
 import { PaymentMode } from '@prisma/client';
 import { paymentService } from '@/services/payment.service';
-import { createPaymentSchema, allocatePaymentsSchema } from '@/validations/payment';
+import { createPaymentSchema, updateAllocationsSchema } from '@/validations/payment';
 import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { getPaymentOnAccount } from '@/lib/balance';
 import { authenticate } from '@/controllers/user.controller';
 import { parsePagination } from '@/lib/pagination';
 import { PaymentFilters } from '@/repositories/payment.repository';
+
+async function parseBody(req: NextRequest): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    throw new BadRequestError('Invalid JSON body');
+  }
+}
 
 export class PaymentController {
   async getAll(req: NextRequest) {
@@ -31,29 +40,23 @@ export class PaymentController {
     const payment = await paymentService.getById(id);
     const { allocations, ...rest } = payment;
 
-    const response = {
+    return successResponse({
       ...rest,
+      onAccount: getPaymentOnAccount(payment.amount, allocations),
       allocations: allocations.map((allocation) => ({
         id: allocation.id,
         invoiceId: allocation.invoiceId,
-        invoiceNo: allocation.invoice.invoiceNo,
+        invoiceNo: allocation.invoice?.invoiceNo ?? null,
         amount: allocation.amount,
+        note: allocation.note,
         createdAt: allocation.createdAt,
       })),
-    };
-
-    return successResponse(response);
+    });
   }
 
   async create(req: NextRequest) {
     const currentUser = authenticate(req);
-
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      throw new BadRequestError('Invalid JSON body');
-    }
+    const body = await parseBody(req);
 
     const validated = createPaymentSchema.safeParse(body);
     if (!validated.success) {
@@ -64,34 +67,38 @@ export class PaymentController {
     return successResponse(payment, 201);
   }
 
-  async allocate(req: NextRequest) {
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      throw new BadRequestError('Invalid JSON body');
-    }
+  async updateAllocations(req: NextRequest, id: string) {
+    authenticate(req);
+    const body = await parseBody(req);
 
-    const validated = allocatePaymentsSchema.safeParse(body);
+    const validated = updateAllocationsSchema.safeParse(body);
     if (!validated.success) {
       throw new BadRequestError(validated.error.issues[0]?.message ?? 'Validation error');
     }
 
-    const result = await paymentService.allocate(validated.data);
+    const payment = await paymentService.updateAllocations(id, validated.data);
+    return successResponse(payment);
+  }
 
-    return successResponse(
-      {
-        created: result.created,
-        updatedInvoices: result.updatedInvoices,
-        updatedPayments: result.updatedPayments,
-      },
-      result.replay ? 200 : 201
-    );
+  async void(req: NextRequest, id: string) {
+    authenticate(req);
+    const payment = await paymentService.voidPayment(id);
+    return successResponse(payment);
   }
 
   async getByCustomer(_req: NextRequest, customerId: string) {
     const payments = await paymentService.getByCustomerId(customerId);
     return successResponse(payments);
+  }
+
+  async getLedger(_req: NextRequest, customerId: string) {
+    const ledger = await paymentService.getLedger(customerId);
+    return successResponse(ledger);
+  }
+
+  async getOpenInvoices(_req: NextRequest, customerId: string) {
+    const openInvoices = await paymentService.getOpenInvoices(customerId);
+    return successResponse(openInvoices);
   }
 
   async getByInvoice(_req: NextRequest, invoiceId: string) {
@@ -100,6 +107,7 @@ export class PaymentController {
     const response = allocations.map((allocation) => ({
       id: allocation.id,
       amount: allocation.amount,
+      note: allocation.note,
       createdAt: allocation.createdAt,
       payment: allocation.payment,
     }));

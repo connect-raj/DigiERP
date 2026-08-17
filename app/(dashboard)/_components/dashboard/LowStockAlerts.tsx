@@ -55,7 +55,7 @@ function LowStockRow({ product, onClick }: { product: LowStockProduct; onClick: 
 export default function LowStockAlerts({ data }: LowStockAlertsProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>('list');
-  const goToProducts = () => router.push('/products');
+  const goToProduct = (productId: string) => router.push(`/products/${productId}`);
 
   if (data.length === 0) {
     return <EmptyState icon="task_alt" message="All products are above their stock limit." />;
@@ -82,7 +82,11 @@ export default function LowStockAlerts({ data }: LowStockAlertsProps) {
       {view === 'list' ? (
         <ul className="divide-outline-variant divide-y-[0.5px]">
           {data.map((product) => (
-            <LowStockRow key={product.productId} product={product} onClick={goToProducts} />
+            <LowStockRow
+              key={product.productId}
+              product={product}
+              onClick={() => goToProduct(product.productId)}
+            />
           ))}
         </ul>
       ) : (
@@ -94,7 +98,11 @@ export default function LowStockAlerts({ data }: LowStockAlertsProps) {
               </p>
               <ul className="divide-outline-variant divide-y-[0.5px]">
                 {group.items.map((product) => (
-                  <LowStockRow key={product.productId} product={product} onClick={goToProducts} />
+                  <LowStockRow
+              key={product.productId}
+              product={product}
+              onClick={() => goToProduct(product.productId)}
+            />
                 ))}
               </ul>
             </div>

@@ -4,6 +4,7 @@ import {
   InvoiceFilters,
   CreateInvoiceItemInput,
 } from '@/repositories/invoice.repository';
+import { customerRepository } from '@/repositories/customer.repository';
 import { NotFoundError, BadRequestError, AppError } from '@/lib/errors';
 import { determineGstType } from '@/lib/gst';
 import { CreateInvoiceInput } from '@/validations/invoice';
@@ -22,12 +23,13 @@ export class InvoiceService {
     let pendingCount = 0;
 
     for (const row of rows) {
+      if (row.status !== 'ACTIVE') continue;
       const total = Number(row.totalAmount);
-      const paidAmt = Number(row.paidAmount);
+      const balanceDue = Number(row.balanceDue);
       totalInvoiced += total;
-      paid += paidAmt;
-      if (row.paymentStatus !== 'PAID') {
-        outstanding += total - paidAmt;
+      paid += total - balanceDue;
+      if (balanceDue > 0.005) {
+        outstanding += balanceDue;
         pendingCount += 1;
       }
     }
@@ -157,6 +159,14 @@ export class InvoiceService {
     });
 
     return invoice;
+  }
+
+  async setOpeningBalance(customerId: string, totalAmount: number, asOfDate: string) {
+    const customer = await customerRepository.findById(customerId);
+    if (!customer) {
+      throw new NotFoundError(`Customer with id '${customerId}' not found`);
+    }
+    return invoiceRepository.upsertOpeningBalance(customerId, totalAmount, new Date(asOfDate));
   }
 }
 

@@ -162,11 +162,12 @@ describe('InvoiceService', () => {
   });
 
   describe('getSummary', () => {
-    it('sums invoiced/paid and treats non-PAID rows as outstanding', async () => {
+    it('sums invoiced/paid from derived balanceDue and counts rows with balance outstanding', async () => {
+      // findStatsRows now yields derived rows: totalAmount, status, balanceDue
       vi.spyOn(invoiceRepository, 'findStatsRows').mockResolvedValue([
-        { totalAmount: 1000, paidAmount: 1000, paymentStatus: 'PAID' },
-        { totalAmount: 500, paidAmount: 200, paymentStatus: 'PARTIAL' },
-        { totalAmount: 300, paidAmount: 0, paymentStatus: 'UNPAID' },
+        { totalAmount: 1000, status: 'ACTIVE', balanceDue: 0 }, // PAID
+        { totalAmount: 500, status: 'ACTIVE', balanceDue: 300 }, // PARTIAL
+        { totalAmount: 300, status: 'ACTIVE', balanceDue: 300 }, // UNPAID
       ] as never);
 
       const result = await invoiceService.getSummary({});

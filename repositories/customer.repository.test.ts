@@ -16,6 +16,10 @@ vi.mock('@/lib/prisma', () => ({
     },
     invoice: {
       count: vi.fn(),
+      findMany: vi.fn(),
+    },
+    payment: {
+      findMany: vi.fn(),
     },
     dispatchEntry: {
       count: vi.fn(),
@@ -37,12 +41,12 @@ describe('CustomerRepository', () => {
     it('uses an empty where clause when no search term is given', async () => {
       vi.mocked(prisma.customer.findMany).mockResolvedValue([]);
       await customerRepository.findAll({});
-      expect(prisma.customer.findMany).toHaveBeenCalledWith({
-        where: {},
-        orderBy: { firmName: 'asc' },
-        skip: undefined,
-        take: undefined,
-      });
+      expect(prisma.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {},
+          orderBy: { firmName: 'asc' },
+        })
+      );
     });
 
     it('searches across firmName, gstin, and city when a search term is given', async () => {
@@ -128,17 +132,17 @@ describe('CustomerRepository', () => {
   });
 
   describe('hasUnpaidInvoices', () => {
-    it('counts invoices that are not fully paid', async () => {
-      vi.mocked(prisma.invoice.count).mockResolvedValue(2);
-      const result = await customerRepository.hasUnpaidInvoices('cust-1');
-      expect(prisma.invoice.count).toHaveBeenCalledWith({
-        where: { customerId: 'cust-1', paymentStatus: { not: 'PAID' } },
-      });
-      expect(result).toBe(true);
+    it('returns true when an active invoice has a positive derived balance', async () => {
+      vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+        { totalAmount: 1000, paymentAllocations: [{ amount: 400 }] },
+      ] as never);
+      expect(await customerRepository.hasUnpaidInvoices('cust-1')).toBe(true);
     });
 
-    it('returns false when all invoices are paid', async () => {
-      vi.mocked(prisma.invoice.count).mockResolvedValue(0);
+    it('returns false when every active invoice is fully paid', async () => {
+      vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+        { totalAmount: 1000, paymentAllocations: [{ amount: 1000 }] },
+      ] as never);
       expect(await customerRepository.hasUnpaidInvoices('cust-1')).toBe(false);
     });
   });

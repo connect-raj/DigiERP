@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import SalesChart from './_components/dashboard/SalesChart';
 import TopCategoryChart from './_components/dashboard/TopCategoryChart';
 import LowStockAlerts from './_components/dashboard/LowStockAlerts';
+import ReceivablesAging from './_components/dashboard/ReceivablesAging';
 import EmptyState from './_components/dashboard/EmptyState';
 import type { ActivityType, DashboardPeriod, DashboardResponse } from './_lib/dashboard-types';
 
@@ -39,30 +40,83 @@ const ACTIVITY_ROUTE: Record<ActivityType, string> = {
   purchase: '/purchases',
 };
 
+function ChangeIndicator({ changePct }: { changePct: number | null }) {
+  if (changePct == null) return null;
+  const flat = Math.abs(changePct) < 0.05;
+  const up = changePct > 0;
+  const icon = flat ? 'trending_flat' : up ? 'arrow_upward' : 'arrow_downward';
+  const toneClass = flat
+    ? 'text-on-surface-variant'
+    : up
+      ? 'text-status-success'
+      : 'text-status-error';
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium ${toneClass}`}
+      title="vs. previous period"
+    >
+      <span className="material-symbols-outlined text-[14px] leading-none">{icon}</span>
+      {Math.abs(changePct).toFixed(1)}%
+    </span>
+  );
+}
+
 function StatTile({
   label,
   value,
   tone = 'primary',
+  href,
+  note,
+  changePct,
 }: {
   label: string;
   value: string;
-  tone?: 'primary' | 'secondary' | 'error';
+  tone?: 'primary' | 'success' | 'error' | 'warning';
+  href?: string;
+  /** Small caption clarifying scope, e.g. "as of today" for running balances. */
+  note?: string;
+  /** Period-over-period change; renders a small ↑/↓ indicator next to the value. */
+  changePct?: number | null;
 }) {
+  const router = useRouter();
   const toneClass =
-    tone === 'secondary' ? 'text-secondary' : tone === 'error' ? 'text-error' : 'text-primary';
+    tone === 'success'
+      ? 'text-status-success'
+      : tone === 'error'
+        ? 'text-status-error'
+        : tone === 'warning'
+          ? 'text-accent-yellow'
+          : 'text-on-surface';
   return (
-    <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-      <p className="text-label-caps text-on-surface-variant mb-1">{label}</p>
-      <p className={`font-display text-headline-md ${toneClass}`}>{value}</p>
+    <div
+      onClick={href ? () => router.push(href) : undefined}
+      className={`bg-surface-container-low border-border rounded-xl border p-5 ${
+        href ? 'hover:bg-surface-container cursor-pointer transition-colors' : ''
+      }`}
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+          {label}
+        </p>
+        {note && (
+          <span className="border-outline-variant text-on-surface-variant shrink-0 rounded-full border-[0.5px] px-2 py-0.5 text-[9px] font-medium tracking-wide uppercase">
+            {note}
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className={`font-mono text-xl font-semibold ${toneClass}`}>{value}</p>
+        {changePct !== undefined && <ChangeIndicator changePct={changePct} />}
+      </div>
     </div>
   );
 }
 
 function StatTileSkeleton() {
   return (
-    <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-      <div className="bg-surface-variant mb-2 h-3 w-24 animate-pulse rounded" />
-      <div className="bg-surface-variant h-7 w-32 animate-pulse rounded" />
+    <div className="bg-surface-container-low border-border rounded-xl border p-5">
+      <div className="bg-surface-container-high mb-2 h-3 w-24 animate-pulse rounded" />
+      <div className="bg-surface-container-high h-7 w-32 animate-pulse rounded" />
     </div>
   );
 }
@@ -77,12 +131,12 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface-container border-outline-variant flex flex-col border-[0.5px]">
-      <div className="border-outline-variant flex items-center gap-2 border-b-[0.5px] px-5 py-4">
+    <div className="bg-surface-container-low border-border flex flex-col rounded-xl border">
+      <div className="border-border flex items-center gap-2 border-b px-5 py-4">
         <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
           {icon}
         </span>
-        <h3 className="text-body-md text-on-surface font-semibold">{title}</h3>
+        <h3 className="text-on-surface font-heading text-sm font-semibold">{title}</h3>
       </div>
       <div className="flex-1 p-5">{children}</div>
     </div>
@@ -114,6 +168,14 @@ export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDispatch, setPendingDispatch] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/dispatch-entries?status=PENDING_BILLING&isCancelled=false&limit=1')
+      .then((r) => r.json())
+      .then((d) => setPendingDispatch(d.pagination?.total ?? 0))
+      .catch((err) => console.error('Failed to fetch pending dispatch count', err));
+  }, []);
 
   const fetchDashboard = useCallback(async (p: DashboardPeriod, isInitial: boolean) => {
     if (!isInitial) setRefreshing(true);
@@ -134,9 +196,9 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDashboard(period, dashboard === null);
-  }, [period, fetchDashboard]);
+  }, [period, fetchDashboard]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -168,8 +230,8 @@ export default function DashboardPage() {
       {dashboard === null ? (
         error ? null : (
           <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
                 <StatTileSkeleton key={i} />
               ))}
             </div>
@@ -179,6 +241,11 @@ export default function DashboardPage() {
               </Card>
               <Card title="Top Categories" icon="bar_chart">
                 <ChartSkeleton />
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <Card title="Receivables Aging" icon="hourglass_bottom">
+                <ListSkeleton />
               </Card>
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -203,22 +270,47 @@ export default function DashboardPage() {
             refreshing ? 'opacity-60' : 'opacity-100'
           }`}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <StatTile label="Invoiced" value={formatINR(dashboard.revenue.invoiced)} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <StatTile
+              label="Invoiced"
+              value={formatINR(dashboard.revenue.invoiced)}
+              href="/invoices"
+              changePct={dashboard.revenue.invoicedChangePct}
+            />
             <StatTile
               label="Collected"
               value={formatINR(dashboard.revenue.collected)}
-              tone="secondary"
+              tone="success"
+              href="/payments"
+              changePct={dashboard.revenue.collectedChangePct}
             />
             <StatTile
               label="Vendor Payables"
               value={formatINR(dashboard.vendorPayables.total)}
               tone="error"
+              href="/purchases?paymentStatus=UNPAID"
+              note="as of today"
             />
             <StatTile
               label="Outstanding (Customers)"
               value={formatINR(dashboard.creditHealth.totalOutstanding)}
               tone="error"
+              href="/invoices?paymentStatus=UNPAID"
+              note="as of today"
+            />
+            <StatTile
+              label="On-Account Credit"
+              value={formatINR(dashboard.onAccountCredit)}
+              tone="warning"
+              href="/payments"
+              note="as of today"
+            />
+            <StatTile
+              label="Awaiting Invoicing"
+              value={pendingDispatch != null ? String(pendingDispatch) : '—'}
+              tone="warning"
+              href="/dispatch-entries?status=PENDING_BILLING"
+              note="as of today"
             />
           </div>
 
@@ -228,6 +320,12 @@ export default function DashboardPage() {
             </Card>
             <Card title="Top Categories" icon="bar_chart">
               <TopCategoryChart data={dashboard.topCategoryChart} />
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Receivables Aging" icon="hourglass_bottom">
+              <ReceivablesAging data={dashboard.receivablesAging} />
             </Card>
           </div>
 
@@ -243,7 +341,7 @@ export default function DashboardPage() {
                       className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
                     >
                       <button
-                        onClick={() => router.push('/vendors')}
+                        onClick={() => router.push(`/vendors/${v.vendorId}`)}
                         className="text-on-surface hover:text-primary text-body-md text-left transition-colors"
                       >
                         {v.vendorName}
@@ -300,7 +398,7 @@ export default function DashboardPage() {
                         {ACTIVITY_ICON[a.type]}
                       </span>
                       <button
-                        onClick={() => router.push(ACTIVITY_ROUTE[a.type])}
+                        onClick={() => router.push(`${ACTIVITY_ROUTE[a.type]}/${a.id}`)}
                         className="text-on-surface hover:text-primary text-body-md flex-1 text-left transition-colors"
                       >
                         {a.label}

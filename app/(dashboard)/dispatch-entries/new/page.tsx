@@ -8,7 +8,7 @@ type Customer = {
   id: string;
   firmName: string;
   state: string;
-  outstandingBalance: string | number;
+  pendingTotal?: string | number;
   creditLimit: string | number;
   gstin?: string | null;
 };

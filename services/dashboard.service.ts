@@ -1,5 +1,6 @@
 import { dashboardRepository } from '@/repositories/dashboard.repository';
 import { getPeriodRange, getIstDateParts, Period } from '@/lib/period';
+import { getInvoiceBalance, round2 } from '@/lib/balance';
 
 const TOP_PENDING_VENDORS_LIMIT = 5;
 const TOP_CATEGORY_LIMIT = 5;
@@ -7,10 +8,13 @@ const RECENT_ACTIVITY_LIMIT = 15;
 
 type InvoiceRow = Awaited<ReturnType<typeof dashboardRepository.findInvoicesInRange>>[number];
 type VendorPayableRow = Awaited<
-  ReturnType<typeof dashboardRepository.findVendorPayablesInRange>
+  ReturnType<typeof dashboardRepository.findVendorPayables>
 >[number];
 type ProductRow = Awaited<ReturnType<typeof dashboardRepository.findActiveProducts>>[number];
 type CustomerRow = Awaited<ReturnType<typeof dashboardRepository.findAllCustomers>>[number];
+type OpenInvoiceRow = Awaited<
+  ReturnType<typeof dashboardRepository.findOpenInvoicesForAging>
+>[number];
 
 type ActivityType = 'dispatch' | 'invoice' | 'payment' | 'purchase';
 
@@ -30,24 +34,49 @@ export class DashboardService {
   async getDashboard(period: Period) {
     const settings = await dashboardRepository.findSettings();
     const financialYearStartMonth = settings?.financialYearStart ?? 4;
-    const range = getPeriodRange(period, new Date(), financialYearStartMonth);
+    const now = new Date();
+    const range = getPeriodRange(period, now, financialYearStartMonth);
+    // Immediately-preceding period of the same length: the period that contains the
+    // instant just before this one starts (previous month, or previous FY).
+    const previousRange = getPeriodRange(
+      period,
+      new Date(range.start.getTime() - 1),
+      financialYearStartMonth
+    );
 
-    const [invoices, collected, vendorPayables, topCategorySales, products, customers, recentActivity] =
-      await Promise.all([
-        dashboardRepository.findInvoicesInRange(range),
-        dashboardRepository.sumPaymentsInRange(range),
-        dashboardRepository.findVendorPayablesInRange(range),
-        dashboardRepository.findTopCategorySalesInRange(range),
-        dashboardRepository.findActiveProducts(),
-        dashboardRepository.findAllCustomers(),
-        this.getRecentActivity(),
-      ]);
+    const [
+      invoices,
+      collected,
+      previousInvoices,
+      previousCollected,
+      vendorPayables,
+      topCategorySales,
+      products,
+      customers,
+      onAccountCredit,
+      openInvoices,
+      recentActivity,
+    ] = await Promise.all([
+      dashboardRepository.findInvoicesInRange(range),
+      dashboardRepository.sumPaymentsInRange(range),
+      dashboardRepository.findInvoicesInRange(previousRange),
+      dashboardRepository.sumPaymentsInRange(previousRange),
+      dashboardRepository.findVendorPayables(),
+      dashboardRepository.findTopCategorySalesInRange(range),
+      dashboardRepository.findActiveProducts(),
+      dashboardRepository.findAllCustomers(),
+      dashboardRepository.sumOnAccountCredit(),
+      dashboardRepository.findOpenInvoicesForAging(),
+      this.getRecentActivity(),
+    ]);
 
     return {
       period,
       periodRange: { start: range.start.toISOString(), end: range.end.toISOString() },
-      revenue: this.buildRevenue(invoices, collected),
+      revenue: this.buildRevenue(invoices, collected, previousInvoices, previousCollected),
       vendorPayables: this.buildVendorPayables(vendorPayables),
+      onAccountCredit,
+      receivablesAging: this.buildAging(openInvoices, now),
       salesChart: this.buildSalesChart(period, invoices),
       topCategoryChart: topCategorySales.slice(0, TOP_CATEGORY_LIMIT),
       lowStock: this.buildLowStock(products),
@@ -56,10 +85,67 @@ export class DashboardService {
     };
   }
 
-  private buildRevenue(invoices: InvoiceRow[], collected: number) {
+  /** Percent change vs the previous period, or null when the previous figure is 0 (undefined). */
+  private percentChange(current: number, previous: number): number | null {
+    if (previous === 0) return null;
+    return round2(((current - previous) / previous) * 100);
+  }
+
+  private buildRevenue(
+    invoices: InvoiceRow[],
+    collected: number,
+    previousInvoices: InvoiceRow[],
+    previousCollected: number
+  ) {
+    const invoiced = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+    const previousInvoiced = previousInvoices.reduce(
+      (sum, invoice) => sum + Number(invoice.totalAmount),
+      0
+    );
     return {
-      invoiced: invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0),
+      invoiced,
       collected,
+      invoicedChangePct: this.percentChange(invoiced, previousInvoiced),
+      collectedChangePct: this.percentChange(collected, previousCollected),
+    };
+  }
+
+  // Buckets each open invoice's live balanceDue by age from its effective date (asOfDate
+  // for opening balances, else invoice date). Sum of buckets = total open invoice balances;
+  // this equals Outstanding (Customers) when there is no unapplied on-account credit, and
+  // differs from it by exactly the On-Account Credit figure when there is.
+  private buildAging(invoices: OpenInvoiceRow[], now: Date) {
+    let bucket0_30 = 0;
+    let bucket31_60 = 0;
+    let bucket60plus = 0;
+
+    for (const invoice of invoices) {
+      const balance = getInvoiceBalance(
+        invoice.totalAmount,
+        invoice.paymentAllocations.map((a) => ({
+          amount: a.amount,
+          paymentStatus: a.payment.status,
+        }))
+      );
+      if (balance <= 0.005) continue;
+
+      const basis = invoice.asOfDate ?? invoice.date;
+      const ageDays = Math.floor((now.getTime() - basis.getTime()) / 86_400_000);
+
+      if (ageDays <= 30) bucket0_30 += balance;
+      else if (ageDays <= 60) bucket31_60 += balance;
+      else bucket60plus += balance;
+    }
+
+    bucket0_30 = round2(bucket0_30);
+    bucket31_60 = round2(bucket31_60);
+    bucket60plus = round2(bucket60plus);
+
+    return {
+      bucket0_30,
+      bucket31_60,
+      bucket60plus,
+      total: round2(bucket0_30 + bucket31_60 + bucket60plus),
     };
   }
 
