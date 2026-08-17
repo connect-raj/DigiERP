@@ -4,6 +4,7 @@ import {
   DispatchEntryFilters,
   DispatchLineItemInput,
 } from '@/repositories/dispatch-entry.repository';
+import { customerRepository } from '@/repositories/customer.repository';
 import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { CreateDispatchEntryInput } from '@/validations/dispatch-entry';
 
@@ -85,7 +86,8 @@ export class DispatchEntryService {
       throw error;
     }
 
-    const outstandingAfter = Number(customer.outstandingBalance) + totalAmount;
+    const currentPending = await customerRepository.getPendingTotal(customer.id);
+    const outstandingAfter = currentPending + totalAmount;
     const creditLimit = Number(customer.creditLimit);
     const warning: CreditLimitWarning | undefined =
       outstandingAfter > creditLimit

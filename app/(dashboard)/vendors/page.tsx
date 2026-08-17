@@ -1,10 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ListToolbar } from '@/components/ui/ListToolbar';
+import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
 
 const PAGE_LIMIT = 20;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Vendor = {
   id: string;
@@ -31,6 +38,8 @@ export default function VendorsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -77,6 +86,8 @@ export default function VendorsPage() {
       isActive: vendor.isActive,
     });
     setEditingId(vendor.id);
+    setErrors({});
+    setSubmitError(null);
     setIsModalOpen(true);
   };
 
@@ -92,11 +103,28 @@ export default function VendorsPage() {
       isActive: true,
     });
     setEditingId(null);
+    setErrors({});
+    setSubmitError(null);
     setIsModalOpen(true);
+  };
+
+  const validate = (): boolean => {
+    const next: Record<string, string> = {};
+    if (!formData.name.trim()) next.name = 'Vendor name is required.';
+    if (!formData.phone.trim()) next.phone = 'Phone is required.';
+    if (!editingId && !formData.address.trim()) next.address = 'Address is required.';
+    if (!editingId && !formData.state.trim()) next.state = 'State is required.';
+    if (formData.email.trim() && !EMAIL_REGEX.test(formData.email.trim())) {
+      next.email = 'Invalid email.';
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    if (!validate()) return;
     try {
       setIsSubmitting(true);
       const url = editingId ? `/api/vendors/${editingId}` : '/api/vendors';
@@ -135,11 +163,11 @@ export default function VendorsPage() {
         fetchVendors();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.message}`);
+        setSubmitError(error.error?.message ?? error.message ?? 'Failed to save vendor.');
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} vendor`, error);
-      alert(`Failed to ${editingId ? 'update' : 'create'} vendor`);
+      setSubmitError(`Failed to ${editingId ? 'update' : 'create'} vendor.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -184,192 +212,151 @@ export default function VendorsPage() {
     fetchVendors();
   }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <div className="flex min-h-full flex-col gap-8">
-      {/* Header and Controls */}
-      <div className="grid grid-cols-1 items-end gap-6 md:grid-cols-12">
-        <div className="flex flex-col gap-4 md:col-span-5">
-          <div>
-            <h1 className="font-display text-display text-primary">Vendors Directory</h1>
-            <p className="font-body-md text-on-surface-variant mt-1">
-              Manage supplier relationships and contact details.
-            </p>
+  const columns = useMemo<ColumnDef<Vendor, unknown>[]>(
+    () => [
+      {
+        id: 'name',
+        accessorFn: (v) => v.name,
+        header: 'Vendor & Contact',
+        cell: ({ row }) => {
+          const vendor = row.original;
+          return (
+            <div className="flex items-center gap-3">
+              <div className="bg-surface-container-high font-display text-primary border-outline-variant flex h-9 w-9 items-center justify-center rounded-lg border-[0.5px] text-xs font-bold">
+                {vendor.name.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-medium">{vendor.name}</span>
+                <span className="text-on-surface-variant text-xs">
+                  {vendor.contactPerson || 'N/A'}
+                </span>
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        id: 'contact',
+        accessorFn: (v) => v.phone ?? '',
+        enableSorting: false,
+        header: 'Contact Info',
+        cell: ({ row }) => (
+          <div className="flex flex-col gap-1 text-xs">
+            <span className="text-on-surface-variant">{row.original.phone || 'N/A'}</span>
+            <span className="text-on-surface-variant">{row.original.email || 'N/A'}</span>
           </div>
-          <div className="focus-within:border-secondary flex h-[52px] items-center rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-1 transition-colors">
-            <span className="material-symbols-outlined px-3 text-[#8e9192]">search</span>
-            <input
-              className="text-primary font-body-md w-full border-none bg-transparent p-0 text-[13px] placeholder:text-[#8e9192] focus:ring-0"
-              placeholder="Search vendors by name, GSTIN, or contact..."
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        ),
+      },
+      {
+        id: 'rating',
+        accessorFn: (v) => v.rating ?? 0,
+        header: 'Rating',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono">
+            {row.original.rating != null ? row.original.rating.toFixed(1) : '—'}
+          </span>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (v) => (v.isActive ? 1 : 0),
+        header: 'Status & Terms',
+        cell: ({ row }) => (
+          <div className="flex flex-col items-start gap-1.5">
+            <span
+              className={
+                row.original.isActive
+                  ? 'bg-status-success/12 text-status-success rounded-full px-2 py-0.5 text-[11px] font-medium uppercase'
+                  : 'bg-status-neutral/12 text-status-neutral rounded-full px-2 py-0.5 text-[11px] font-medium uppercase'
+              }
+            >
+              {row.original.isActive ? 'Active' : 'Inactive'}
+            </span>
+            <span className="text-on-surface-variant text-xs">
+              Net {row.original.paymentTerms || '30'} Days
+            </span>
           </div>
-        </div>
-        <div className="flex h-[52px] justify-end gap-4 md:col-span-7">
-          <div className="flex min-w-[160px] cursor-pointer items-center justify-between rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] px-4 transition-colors hover:border-[#555]">
-            <span className="font-body-md text-[13px] text-[#c4c7c8]">Status: Active</span>
-            <span className="material-symbols-outlined text-[#8e9192]">arrow_drop_down</span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: '',
+        enableSorting: false,
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openEditModal(row.original);
+              }}
+              className="text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-md p-1.5 transition-colors"
+              title="Edit"
+            >
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(row.original.id, row.original.name);
+              }}
+              className="text-on-surface-variant hover:text-status-error hover:bg-surface-container-high rounded-md p-1.5 transition-colors"
+              title="Delete"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete</span>
+            </button>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="bg-primary text-background font-body-md hover:bg-opacity-90 flex items-center gap-2 rounded-xl px-6 font-bold shadow-sm transition-all"
-          >
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            Add Vendor
-          </button>
-        </div>
-      </div>
+        ),
+      },
+    ],
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
-      {/* Vendors Table */}
-      <div className="flex min-h-[500px] flex-col overflow-hidden rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c]">
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr className="border-b-[0.5px] border-[#333] bg-[#222]">
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Vendor & Contact
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Contact Info
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-center tracking-widest uppercase">
-                Rating
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 tracking-widest uppercase">
-                Status & Terms
-              </th>
-              <th className="font-label-caps text-label-caps text-outline px-6 py-4 text-right tracking-widest uppercase">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y-[0.5px] divide-[#333]">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="text-on-surface-variant px-6 py-8 text-center">
-                  Loading vendors...
-                </td>
-              </tr>
-            ) : pagination.total === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-on-surface-variant px-6 py-8 text-center">
-                  No vendors found.
-                </td>
-              </tr>
-            ) : (
-              vendors.map((vendor) => (
-                <tr
-                  key={vendor.id}
-                  onClick={() => router.push(`/vendors/${vendor.id}`)}
-                  className="group cursor-pointer transition-colors hover:bg-[#252525]"
-                >
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-surface-container-high font-display text-primary flex h-10 w-10 items-center justify-center rounded-lg border-[0.5px] border-[#444] font-bold">
-                        {vendor.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-primary text-[14px] font-semibold">
-                          {vendor.name}
-                        </span>
-                        <span className="text-on-surface-variant mt-0.5 flex items-center gap-1 text-[12px]">
-                          <span className="material-symbols-outlined text-[14px]">person</span>{' '}
-                          {vendor.contactPerson || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex flex-col gap-1.5">
-                      <div className="text-on-surface-variant flex items-center gap-2 text-[13px]">
-                        <span className="material-symbols-outlined text-[16px] text-[#8e9192]">
-                          call
-                        </span>
-                        {vendor.phone || 'N/A'}
-                      </div>
-                      <div className="text-on-surface-variant flex items-center gap-2 text-[13px]">
-                        <span className="material-symbols-outlined text-[16px] text-[#8e9192]">
-                          mail
-                        </span>
-                        {vendor.email || 'N/A'}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <div className="bg-surface-container-highest inline-flex items-center gap-1 rounded-full border-[0.5px] border-[#444] px-2.5 py-1">
-                      <span className="font-data-tabular text-primary text-[13px] font-bold">
-                        {vendor.rating !== undefined && vendor.rating !== null
-                          ? vendor.rating.toFixed(1)
-                          : 'N/A'}
-                      </span>
-                      <span
-                        className="material-symbols-outlined text-[14px] text-amber-400"
-                        style={{ fontVariationSettings: "'FILL' 1" }}
-                      >
-                        star
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex flex-col items-start gap-2">
-                      {vendor.isActive ? (
-                        <span className="rounded border-[0.5px] border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-bold tracking-wider text-green-400 uppercase">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="bg-outline-variant/20 text-outline border-outline-variant/30 rounded border-[0.5px] px-2 py-0.5 text-[11px] font-bold tracking-wider uppercase">
-                          Inactive
-                        </span>
-                      )}
-                      <span className="text-on-surface-variant rounded border-[0.5px] border-[#333] bg-[#222] px-2 py-0.5 text-[12px]">
-                        Net {vendor.paymentTerms || '30'} Days
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(vendor);
-                        }}
-                        className="text-outline hover:text-primary rounded-md p-1.5 transition-colors hover:bg-[#333]"
-                        title="Edit"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">edit</span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(vendor.id, vendor.name);
-                        }}
-                        className="text-outline hover:text-error rounded-md p-1.5 transition-colors hover:bg-[#333]"
-                        title="Delete"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        {!loading && (
-          <Pagination
-            page={page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
-            limit={PAGE_LIMIT}
-            onPageChange={setPage}
+  return (
+    <div className="flex min-h-full flex-col gap-6">
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search vendors by name, GSTIN, or contact..."
+        actions={
+          <Button onClick={openCreateModal}>
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Add Vendor
+          </Button>
+        }
+      />
+
+      <DataTable
+        columns={columns}
+        data={vendors}
+        getRowId={(v) => v.id}
+        loading={loading}
+        onRowClick={(v) => router.push(`/vendors/${v.id}`)}
+        emptyState={
+          <EmptyState
+            icon={<span className="material-symbols-outlined text-[40px]">factory</span>}
+            title="No vendors found"
+            description="Add a vendor or adjust your search."
           />
-        )}
-      </div>
+        }
+        footer={
+          !loading && (
+            <Pagination
+              page={page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={PAGE_LIMIT}
+              onPageChange={setPage}
+            />
+          )
+        }
+      />
 
       {/* Add Vendor Modal */}
       {isModalOpen && (
         <div className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
-          <div className="animate-in zoom-in-95 hide-scrollbar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6 shadow-2xl duration-200">
+          <div className="animate-in zoom-in-95 hide-scrollbar border-border bg-surface-container max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-6 shadow-2xl duration-200">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="font-headline-md text-headline-md text-primary">
                 {editingId ? 'Edit Vendor' : 'Add New Vendor'}
@@ -382,106 +369,72 @@ export default function VendorsPage() {
               </button>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                  Company / Vendor Name *
-                </label>
-                <input
-                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+              <SubmitError>{submitError}</SubmitError>
+              <FormField label="Company / Vendor Name" required error={errors.name}>
+                <TextInput
                   placeholder="e.g. Acme Supplies"
-                  type="text"
                   value={formData.name}
+                  invalid={!!errors.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
                 />
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Phone *
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                <FormField label="Phone" required error={errors.phone}>
+                  <TextInput
                     placeholder="+91..."
-                    type="text"
                     value={formData.phone}
+                    invalid={!!errors.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    required
                   />
-                </div>
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Email
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
-                    placeholder="contact@company.com"
+                </FormField>
+                <FormField label="Email" error={errors.email}>
+                  <TextInput
                     type="email"
+                    placeholder="contact@company.com"
                     value={formData.email}
+                    invalid={!!errors.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
-                </div>
+                </FormField>
               </div>
-              <div>
-                <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                  Address *
-                </label>
-                <input
-                  className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+              <FormField label="Address" required={!editingId} error={errors.address}>
+                <TextInput
                   placeholder="Full business address"
-                  type="text"
                   value={formData.address}
+                  invalid={!!errors.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required={!editingId}
                 />
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    State *
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                <FormField label="State" required={!editingId} error={errors.state}>
+                  <TextInput
                     placeholder="e.g. Maharashtra"
-                    type="text"
                     value={formData.state}
+                    invalid={!!errors.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    required={!editingId}
                   />
-                </div>
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    GSTIN
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                </FormField>
+                <FormField label="GSTIN">
+                  <TextInput
+                    className="font-mono uppercase"
                     placeholder="15-digit GSTIN"
-                    type="text"
                     value={formData.gstin}
                     onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
                   />
-                </div>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                    Payment Terms (Days)
-                  </label>
-                  <input
-                    className="text-body-md text-primary focus:border-secondary-container w-full rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
-                    placeholder="30"
+                <FormField label="Payment Terms (Days)">
+                  <TextInput
                     type="number"
+                    placeholder="30"
                     value={formData.paymentTerms}
                     onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
                   />
-                </div>
+                </FormField>
                 {editingId && (
-                  <div>
-                    <label className="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase">
-                      Status
-                    </label>
-                    <select
-                      className="text-body-md text-primary focus:border-secondary-container w-full appearance-none rounded-lg border-[0.5px] border-[#333] bg-[#141313] p-3 outline-none"
+                  <FormField label="Status">
+                    <SelectInput
                       value={formData.isActive.toString()}
                       onChange={(e) =>
                         setFormData({ ...formData, isActive: e.target.value === 'true' })
@@ -489,26 +442,23 @@ export default function VendorsPage() {
                     >
                       <option value="true">Active</option>
                       <option value="false">Inactive</option>
-                    </select>
-                  </div>
+                    </SelectInput>
+                  </FormField>
                 )}
               </div>
-              <div className="mt-6 flex gap-4 border-t-[0.5px] border-[#333] pt-4">
-                <button
-                  className="text-primary flex-1 rounded-lg border-[0.5px] border-[#444] py-2.5 font-semibold transition-all hover:bg-[#252525]"
-                  onClick={() => setIsModalOpen(false)}
+              <div className="border-border mt-6 flex gap-3 border-t pt-4">
+                <Button
                   type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
                 >
                   Cancel
-                </button>
-                <button
-                  className="bg-primary text-background hover:bg-opacity-90 flex-1 rounded-lg py-2.5 font-semibold transition-all disabled:opacity-50"
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
-                </button>
+                </Button>
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving…' : editingId ? 'Update' : 'Create'}
+                </Button>
               </div>
             </form>
           </div>

@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma';
-import { Prisma, DocStatus } from '@prisma/client';
+import { Prisma, DocStatus, RecordStatus } from '@prisma/client';
 import { BadRequestError } from '@/lib/errors';
+import { getInvoiceBalance, getInvoiceDisplayStatus } from '@/lib/balance';
 
 export interface DispatchEntryFilters {
   customerId?: string;
@@ -73,7 +74,7 @@ export class DispatchEntryRepository {
   }
 
   async findById(id: string) {
-    return prisma.dispatchEntry.findUnique({
+    const entry = await prisma.dispatchEntry.findUnique({
       where: { id },
       include: {
         customer: { select: { id: true, firmName: true, state: true, gstin: true } },
@@ -82,12 +83,43 @@ export class DispatchEntryRepository {
             product: { select: { name: true, category: { select: { name: true } } } },
           },
         },
-        invoice: { select: { id: true, invoiceNo: true, date: true, paymentStatus: true } },
+        invoice: {
+          select: {
+            id: true,
+            invoiceNo: true,
+            date: true,
+            totalAmount: true,
+            paymentAllocations: {
+              where: { payment: { status: RecordStatus.ACTIVE } },
+              select: { amount: true },
+            },
+          },
+        },
         stockTxns: {
           include: { product: { select: { name: true } } },
         },
       },
     });
+
+    if (!entry) return null;
+
+    // derive the linked invoice's payment status (no stored column)
+    const { invoice, ...rest } = entry;
+    if (!invoice) return { ...rest, invoice: null };
+
+    const { paymentAllocations, ...invoiceRest } = invoice;
+    const balanceDue = getInvoiceBalance(
+      invoice.totalAmount,
+      paymentAllocations.map((a) => ({ amount: a.amount, paymentStatus: RecordStatus.ACTIVE }))
+    );
+    return {
+      ...rest,
+      invoice: {
+        ...invoiceRest,
+        balanceDue,
+        paymentStatus: getInvoiceDisplayStatus(invoice.totalAmount, balanceDue),
+      },
+    };
   }
 
   async findCustomerById(customerId: string) {

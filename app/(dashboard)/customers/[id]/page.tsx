@@ -6,6 +6,11 @@ import Link from 'next/link';
 import CustomerFormDrawer, { Customer } from '../_components/CustomerFormDrawer';
 import RecordPaymentModal from '../../payments/_components/RecordPaymentModal';
 import AllocatePaymentsModal from '../../payments/_components/AllocatePaymentsModal';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
+import { DetailCard } from '@/components/ui/DetailCard';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { Button } from '@/components/ui/button';
 
 type CustomerPrice = {
   id: string;
@@ -50,9 +55,10 @@ type Invoice = {
 type Payment = {
   id: string;
   amount: string | number;
-  unallocatedAmount: string | number;
+  onAccount: string | number;
   mode: string;
   reference: string | null;
+  status?: 'ACTIVE' | 'VOID';
   date: string;
 };
 
@@ -71,17 +77,6 @@ function formatDate(val: string) {
     year: 'numeric',
   });
 }
-
-const paymentStatusColor = (status: string) => {
-  switch (status) {
-    case 'PAID':
-      return 'bg-secondary/15 text-secondary';
-    case 'PARTIAL':
-      return 'bg-orange-400/15 text-orange-400';
-    default:
-      return 'bg-error/15 text-error';
-  }
-};
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -105,6 +100,69 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [savingPrice, setSavingPrice] = useState(false);
   const [addingPrice, setAddingPrice] = useState(false);
   const [newPriceProductId, setNewPriceProductId] = useState('');
+
+  const [savingBillingMode, setSavingBillingMode] = useState(false);
+  const [openingBalanceInput, setOpeningBalanceInput] = useState('');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState('');
+  const [savingOpeningBalance, setSavingOpeningBalance] = useState(false);
+
+  const updateBillingMode = async (mode: 'BILL_WISE' | 'OPEN_BALANCE') => {
+    try {
+      setSavingBillingMode(true);
+      const res = await fetch(`/api/customers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingMode: mode }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to update billing mode');
+        return;
+      }
+      fetchData();
+    } catch (err) {
+      console.error('Failed to update billing mode', err);
+      window.alert('Failed to update billing mode');
+    } finally {
+      setSavingBillingMode(false);
+    }
+  };
+
+  const saveOpeningBalance = async () => {
+    const parsed = Number(openingBalanceInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      window.alert('Enter a valid non-negative opening balance.');
+      return;
+    }
+    if (!openingBalanceDate) {
+      window.alert('Pick an as-of date for the opening balance.');
+      return;
+    }
+    try {
+      setSavingOpeningBalance(true);
+      const res = await fetch(`/api/customers/${id}/opening-balance`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          totalAmount: parsed,
+          asOfDate: new Date(openingBalanceDate).toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to set opening balance');
+        return;
+      }
+      setOpeningBalanceInput('');
+      setOpeningBalanceDate('');
+      fetchData();
+    } catch (err) {
+      console.error('Failed to set opening balance', err);
+      window.alert('Failed to set opening balance');
+    } finally {
+      setSavingOpeningBalance(false);
+    }
+  };
 
   const savePrice = async (productId: string) => {
     const parsed = Number(priceInput);
@@ -151,27 +209,36 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           fetch(`/api/customers/${id}/payments`),
         ]);
 
-      const custData = await custRes.json();
-      if (!custRes.ok || !custData.data) {
-        setError(custData.error?.message || 'Failed to load customer');
+      // The customer record is required; if it fails, surface the error.
+      const custData = custRes.ok ? await custRes.json() : null;
+      if (!custData?.data) {
+        setError(custData?.error?.message || 'Failed to load customer');
         return;
       }
       setCustomer(custData.data);
 
-      const pricesData = await pricesRes.json();
-      if (pricesData.data) setPrices(pricesData.data);
-
-      const historyData = await historyRes.json();
-      if (historyData.data) setPriceHistory(historyData.data.slice(0, 10));
-
-      const dispatchData = await dispatchRes.json();
-      if (dispatchData.data) setDispatchEntries(dispatchData.data.slice(0, 5));
-
-      const invoicesData = await invoicesRes.json();
-      if (invoicesData.data) setInvoices(invoicesData.data.slice(0, 5));
-
-      const paymentsData = await paymentsRes.json();
-      if (paymentsData.data) setPayments(paymentsData.data.slice(0, 5));
+      // Secondary sections degrade gracefully — a non-OK/non-JSON response for
+      // any of them must not crash the whole page.
+      if (pricesRes.ok) {
+        const pricesData = await pricesRes.json();
+        if (pricesData.data) setPrices(pricesData.data);
+      }
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        if (historyData.data) setPriceHistory(historyData.data.slice(0, 10));
+      }
+      if (dispatchRes.ok) {
+        const dispatchData = await dispatchRes.json();
+        if (dispatchData.data) setDispatchEntries(dispatchData.data.slice(0, 5));
+      }
+      if (invoicesRes.ok) {
+        const invoicesData = await invoicesRes.json();
+        if (invoicesData.data) setInvoices(invoicesData.data.slice(0, 5));
+      }
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        if (paymentsData.data) setPayments(paymentsData.data.slice(0, 5));
+      }
     } catch (err) {
       console.error('Failed to load customer detail', err);
       setError('Failed to load customer detail.');
@@ -205,13 +272,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   if (loading) {
     return (
-      <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
-        <div className="flex flex-col items-center gap-2">
-          <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-            progress_activity
-          </span>
-          <span>Loading customer...</span>
-        </div>
+      <div className="flex h-full items-center justify-center p-12">
+        <RegistrationMark size="lg" spinning />
       </div>
     );
   }
@@ -219,94 +281,137 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   if (error || !customer) {
     return (
       <div className="text-on-surface-variant flex h-full flex-col items-center justify-center gap-4 p-12">
-        <span className="material-symbols-outlined text-[48px] text-red-400">error</span>
-        <p className="text-body-lg text-primary font-bold">{error || 'Customer not found'}</p>
-        <button
-          onClick={() => router.push('/customers')}
-          className="bg-surface-container border-outline-variant text-primary text-body-sm rounded-lg border-[0.5px] px-4 py-2 transition-colors hover:bg-[#252525]"
-        >
+        <span className="material-symbols-outlined text-status-error text-[48px]">error</span>
+        <p className="text-on-surface font-semibold">{error || 'Customer not found'}</p>
+        <Button variant="outline" size="sm" onClick={() => router.push('/customers')}>
           Back to Customers
-        </button>
+        </Button>
       </div>
     );
   }
 
-  const outstanding = Number(customer.outstandingBalance);
+  // pendingTotal is derived: positive = owed by customer, negative = on-account credit
+  const pendingTotal = Number(customer.pendingTotal ?? 0);
+  const outstanding = Math.max(0, pendingTotal);
+  const creditBalance = Math.max(0, -pendingTotal);
   const limit = Number(customer.creditLimit);
   const utilization = limit > 0 ? Math.min((outstanding / limit) * 100, 100) : 0;
 
   return (
     <div className="flex flex-col gap-6 pb-12">
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/customers')}
-            className="bg-surface-container border-outline-variant flex h-9 w-9 items-center justify-center rounded-lg border-[0.5px] transition-colors hover:bg-[#252525]"
-          >
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="icon" onClick={() => router.push('/customers')}>
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          </button>
+          </Button>
           <div>
-            <h1 className="font-headline-md text-headline-md text-primary">{customer.firmName}</h1>
-            <p className="text-on-surface-variant text-body-sm mt-0.5">
+            <h1 className="font-display text-on-surface text-xl font-semibold tracking-tight">
+              {customer.firmName}
+            </h1>
+            <p className="text-on-surface-variant mt-0.5 text-sm">
               {[customer.city, customer.state].filter(Boolean).join(', ')}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsAllocateModalOpen(true)}
-            className="border-outline-variant text-on-surface hover:bg-surface-container-high font-body-md flex items-center gap-2 rounded-lg border-[0.5px] px-4 py-2 font-medium transition-colors"
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/customers/${id}/ledger`}>
+              <span className="material-symbols-outlined text-[18px]">description</span>
+              Statement
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setIsAllocateModalOpen(true)}>
             <span className="material-symbols-outlined text-[18px]">sync_alt</span>
             Allocate Payments
-          </button>
-          <button
-            onClick={() => setIsRecordModalOpen(true)}
-            className="bg-secondary text-on-secondary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition-colors hover:opacity-90"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setIsRecordModalOpen(true)}>
             <span className="material-symbols-outlined text-[18px]">payments</span>
             Record Payment
-          </button>
-          <button
-            onClick={() => setIsDrawerOpen(true)}
-            className="bg-primary text-on-primary font-body-md flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition-colors hover:opacity-90"
-          >
+          </Button>
+          <Button size="sm" onClick={() => setIsDrawerOpen(true)}>
             <span className="material-symbols-outlined text-[18px]">edit</span>
             Edit Customer
-          </button>
+          </Button>
         </div>
+      </div>
+
+      {/* Smart-buttons: live stats linking to filtered lists */}
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href={`/invoices?customerId=${id}`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Open Invoices
+          </span>
+          <span className="text-on-surface font-mono text-lg font-semibold">
+            {invoices.filter((i) => i.paymentStatus !== 'PAID').length}
+          </span>
+        </Link>
+        <Link
+          href={`/customers/${id}/ledger`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Outstanding
+          </span>
+          <span className="text-status-error font-mono text-lg font-semibold">
+            {formatINR(outstanding)}
+          </span>
+        </Link>
+        {creditBalance > 0 && (
+          <Link
+            href={`/customers/${id}/ledger`}
+            className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+          >
+            <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+              On Account
+            </span>
+            <span className="text-accent-yellow font-mono text-lg font-semibold">
+              {formatINR(creditBalance)}
+            </span>
+          </Link>
+        )}
+        <Link
+          href={`/payments?customerId=${id}`}
+          className="border-border bg-surface-container-low hover:bg-surface-container flex min-w-[140px] flex-col rounded-xl border px-4 py-3 transition-colors"
+        >
+          <span className="text-on-surface-variant text-[11px] font-medium tracking-widest uppercase">
+            Payments
+          </span>
+          <span className="text-on-surface font-mono text-lg font-semibold">{payments.length}</span>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column */}
         <div className="flex flex-col gap-6 lg:col-span-2">
           {/* Negotiated Prices */}
-          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant flex items-center justify-between border-b-[0.5px] p-5">
-              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">sell</span>
-                Negotiated Prices
-              </h2>
-              <button
+          <DetailCard
+            title="Negotiated Prices"
+            contentClassName="p-0"
+            headerAside={
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   setAddingPrice((v) => !v);
                   setNewPriceProductId('');
                   setPriceInput('');
                   setEditingProductId(null);
                 }}
-                className="border-outline-variant text-on-surface hover:bg-surface-container-high flex items-center gap-1.5 rounded-lg border-[0.5px] px-3 py-1.5 text-[13px] font-medium transition-colors"
               >
                 <span className="material-symbols-outlined text-[16px]">add</span>
                 Set Manual Price
-              </button>
-            </div>
-
+              </Button>
+            }
+          >
             {addingPrice && (
-              <div className="border-outline-variant bg-surface-container-low flex flex-wrap items-center gap-3 border-b-[0.5px] p-4">
+              <div className="border-border bg-surface-container-low flex flex-wrap items-center gap-3 border-b p-4">
                 <select
                   value={newPriceProductId}
                   onChange={(e) => setNewPriceProductId(e.target.value)}
-                  className="bg-surface-container-lowest border-outline-variant text-body-sm rounded-lg border-[0.5px] px-3 py-2"
+                  className="bg-surface-container-lowest border-border text-on-surface focus:border-ring rounded-lg border px-3 py-2 text-sm focus:outline-none"
                 >
                   <option value="">Select product…</option>
                   {products.map((p) => (
@@ -322,47 +427,40 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   value={priceInput}
                   onChange={(e) => setPriceInput(e.target.value)}
                   placeholder="Price"
-                  className="bg-surface-container-lowest border-outline-variant text-body-sm w-32 rounded-lg border-[0.5px] px-3 py-2"
+                  className="bg-surface-container-lowest border-border text-on-surface focus:border-ring w-32 rounded-lg border px-3 py-2 text-sm focus:outline-none"
                 />
-                <button
+                <Button
+                  size="sm"
                   disabled={!newPriceProductId || savingPrice}
                   onClick={() => savePrice(newPriceProductId)}
-                  className="bg-secondary text-on-secondary rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors hover:opacity-90 disabled:opacity-50"
                 >
                   {savingPrice ? 'Saving…' : 'Save'}
-                </button>
+                </Button>
               </div>
             )}
 
             {prices.length === 0 && !addingPrice ? (
-              <p className="text-on-surface-variant text-body-sm p-6 text-center">
-                No negotiated prices yet. Prices are recorded automatically the first time a product
-                is invoiced to this customer, or set one manually above.
-              </p>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-[40px]">sell</span>}
+                title="No negotiated prices yet"
+                description="Prices are recorded automatically the first time a product is invoiced to this customer, or set one manually above."
+              />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="bg-surface-container-low border-outline-variant border-b-[0.5px]">
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
-                        Product
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
-                        Price
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
-                        Source
-                      </th>
+                    <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                      <th className="px-5 py-3">Product</th>
+                      <th className="px-5 py-3 text-right">Price</th>
+                      <th className="px-5 py-3">Source</th>
                       <th className="px-5 py-3"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-outline-variant/30 divide-y">
+                  <tbody className="divide-border divide-y">
                     {prices.map((cp) => (
-                      <tr key={cp.id} className="transition-colors hover:bg-[#222]">
-                        <td className="text-body-md text-primary px-5 py-3 font-medium">
-                          {cp.product.name}
-                        </td>
-                        <td className="font-data-tabular text-primary px-5 py-3 text-right">
+                      <tr key={cp.id} className="hover:bg-surface-container transition-colors">
+                        <td className="text-on-surface px-5 py-3 font-medium">{cp.product.name}</td>
+                        <td className="text-on-surface px-5 py-3 text-right font-mono">
                           {editingProductId === cp.productId ? (
                             <input
                               type="number"
@@ -370,7 +468,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                               step="0.01"
                               value={priceInput}
                               onChange={(e) => setPriceInput(e.target.value)}
-                              className="bg-surface-container-lowest border-outline-variant w-28 rounded-lg border-[0.5px] px-2 py-1 text-right"
+                              className="bg-surface-container-lowest border-border focus:border-ring w-28 rounded-lg border px-2 py-1 text-right focus:outline-none"
                             />
                           ) : (
                             <>
@@ -382,8 +480,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
                               cp.isManual
-                                ? 'bg-secondary/15 text-secondary'
-                                : 'bg-surface-variant text-on-surface-variant'
+                                ? 'bg-accent-cyan/15 text-accent-cyan'
+                                : 'bg-surface-container-high text-on-surface-variant'
                             }`}
                           >
                             {cp.isManual ? 'Manual' : 'Auto'}
@@ -395,7 +493,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                               <button
                                 disabled={savingPrice}
                                 onClick={() => savePrice(cp.productId)}
-                                className="text-secondary text-[13px] font-semibold disabled:opacity-50"
+                                className="text-accent-cyan text-[13px] font-semibold disabled:opacity-50"
                               >
                                 Save
                               </button>
@@ -413,7 +511,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                                 setAddingPrice(false);
                                 setPriceInput(String(Number(cp.price)));
                               }}
-                              className="text-on-surface-variant hover:text-primary rounded p-1"
+                              className="text-on-surface-variant hover:text-on-surface rounded p-1"
                               title="Edit price"
                             >
                               <span className="material-symbols-outlined text-[18px]">edit</span>
@@ -426,57 +524,45 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 </table>
               </div>
             )}
-          </div>
+          </DetailCard>
 
           {/* Price History */}
-          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant border-b-[0.5px] p-5">
-              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">history</span>
-                Price History
-              </h2>
-            </div>
+          <DetailCard title="Price History" contentClassName="p-0">
             {priceHistory.length === 0 ? (
-              <p className="text-on-surface-variant text-body-sm p-6 text-center">
-                No price changes recorded yet.
-              </p>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-[40px]">history</span>}
+                title="No price changes yet"
+                description="Manual and auto-recorded price updates will appear here."
+              />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="bg-surface-container-low border-outline-variant border-b-[0.5px]">
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
-                        Date
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
-                        Product
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right tracking-wider uppercase">
-                        Price
-                      </th>
-                      <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 tracking-wider uppercase">
-                        Source
-                      </th>
+                    <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                      <th className="px-5 py-3">Date</th>
+                      <th className="px-5 py-3">Product</th>
+                      <th className="px-5 py-3 text-right">Price</th>
+                      <th className="px-5 py-3">Source</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-outline-variant/30 divide-y">
+                  <tbody className="divide-border divide-y">
                     {priceHistory.map((row) => (
-                      <tr key={row.id} className="transition-colors hover:bg-[#222]">
+                      <tr key={row.id} className="hover:bg-surface-container transition-colors">
                         <td className="text-on-surface-variant px-5 py-3 text-[13px]">
                           {formatDate(row.recordedAt)}
                         </td>
-                        <td className="text-body-md text-primary px-5 py-3 font-medium">
+                        <td className="text-on-surface px-5 py-3 font-medium">
                           {row.product.name}
                         </td>
-                        <td className="font-data-tabular text-primary px-5 py-3 text-right">
+                        <td className="text-on-surface px-5 py-3 text-right font-mono">
                           {formatINR(row.price)} / {row.product.unit}
                         </td>
                         <td className="px-5 py-3">
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
                               row.source === 'MANUAL'
-                                ? 'bg-secondary/15 text-secondary'
-                                : 'bg-surface-variant text-on-surface-variant'
+                                ? 'bg-accent-cyan/15 text-accent-cyan'
+                                : 'bg-surface-container-high text-on-surface-variant'
                             }`}
                           >
                             {row.source.replace('AUTO_INVOICE', 'Auto').replace('MANUAL', 'Manual')}
@@ -488,140 +574,124 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 </table>
               </div>
             )}
-          </div>
+          </DetailCard>
 
           {/* Recent Dispatch Entries */}
-          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant flex items-center justify-between border-b-[0.5px] p-5">
-              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">local_shipping</span>
-                Recent Dispatch Entries
-              </h2>
+          <DetailCard
+            title="Recent Dispatch Entries"
+            contentClassName="p-0"
+            headerAside={
               <Link
-                href={`/dispatch-entries`}
-                className="text-secondary hover:text-primary text-[13px] font-medium transition-colors"
+                href={`/dispatch-entries?customerId=${id}`}
+                className="text-accent-cyan hover:text-on-surface text-[13px] font-medium transition-colors"
               >
                 View All
               </Link>
-            </div>
+            }
+          >
             {dispatchEntries.length === 0 ? (
-              <p className="text-on-surface-variant text-body-sm p-6 text-center">
-                No dispatch entries yet.
-              </p>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-[40px]">local_shipping</span>}
+                title="No dispatch entries yet"
+              />
             ) : (
-              <div className="divide-outline-variant/30 divide-y">
+              <div className="divide-border divide-y">
                 {dispatchEntries.map((entry) => (
                   <div
                     key={entry.id}
                     onClick={() => router.push(`/dispatch-entries/${entry.id}`)}
-                    className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-[#222]"
+                    className="hover:bg-surface-container flex cursor-pointer items-center justify-between p-4 transition-colors"
                   >
                     <div>
-                      <p className="text-body-md text-primary font-semibold">
-                        Challan #{entry.challanNo}
-                      </p>
+                      <p className="text-on-surface font-semibold">Challan #{entry.challanNo}</p>
                       <p className="text-on-surface-variant text-[12px]">
                         {formatDate(entry.date)}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-data-tabular text-primary font-semibold">
+                      <span className="text-on-surface font-mono font-semibold">
                         {formatINR(entry.totalAmount)}
                       </span>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
-                          entry.status === 'BILLED'
-                            ? 'bg-secondary/15 text-secondary'
-                            : 'bg-amber-400/15 text-amber-400'
-                        }`}
-                      >
-                        {entry.status === 'BILLED' ? 'Billed' : 'Pending'}
-                      </span>
+                      <StatusPill status={entry.status === 'BILLED' ? 'INVOICED' : 'DISPATCHED'} />
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </DetailCard>
 
           {/* Recent Invoices */}
-          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant flex items-center justify-between border-b-[0.5px] p-5">
-              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">receipt_long</span>
-                Recent Invoices
-              </h2>
+          <DetailCard
+            title="Recent Invoices"
+            contentClassName="p-0"
+            headerAside={
               <Link
-                href={`/invoices`}
-                className="text-secondary hover:text-primary text-[13px] font-medium transition-colors"
+                href={`/invoices?customerId=${id}`}
+                className="text-accent-cyan hover:text-on-surface text-[13px] font-medium transition-colors"
               >
                 View All
               </Link>
-            </div>
+            }
+          >
             {invoices.length === 0 ? (
-              <p className="text-on-surface-variant text-body-sm p-6 text-center">
-                No invoices yet.
-              </p>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-[40px]">receipt_long</span>}
+                title="No invoices yet"
+              />
             ) : (
-              <div className="divide-outline-variant/30 divide-y">
+              <div className="divide-border divide-y">
                 {invoices.map((invoice) => (
                   <div
                     key={invoice.id}
                     onClick={() => router.push(`/invoices/${invoice.id}`)}
-                    className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-[#222]"
+                    className="hover:bg-surface-container flex cursor-pointer items-center justify-between p-4 transition-colors"
                   >
                     <div>
-                      <p className="font-data-tabular text-primary font-semibold">
-                        {invoice.invoiceNo}
-                      </p>
+                      <p className="text-on-surface font-mono font-semibold">{invoice.invoiceNo}</p>
                       <p className="text-on-surface-variant text-[12px]">
                         {formatDate(invoice.date)}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-data-tabular text-primary font-semibold">
+                      <span className="text-on-surface font-mono font-semibold">
                         {formatINR(invoice.totalAmount)}
                       </span>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${paymentStatusColor(invoice.paymentStatus)}`}
-                      >
-                        {invoice.paymentStatus}
-                      </span>
+                      <StatusPill status={invoice.paymentStatus as Status} />
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </DetailCard>
 
           {/* Recent Payments */}
-          <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-            <div className="border-outline-variant flex items-center justify-between border-b-[0.5px] p-5">
-              <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">payments</span>
-                Recent Payments
-              </h2>
+          <DetailCard
+            title="Recent Payments"
+            contentClassName="p-0"
+            headerAside={
               <Link
-                href={`/payments`}
-                className="text-secondary hover:text-primary text-[13px] font-medium transition-colors"
+                href={`/payments?customerId=${id}`}
+                className="text-accent-cyan hover:text-on-surface text-[13px] font-medium transition-colors"
               >
                 View All
               </Link>
-            </div>
+            }
+          >
             {payments.length === 0 ? (
-              <p className="text-on-surface-variant text-body-sm p-6 text-center">
-                No payments yet.
-              </p>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-[40px]">payments</span>}
+                title="No payments yet"
+              />
             ) : (
-              <div className="divide-outline-variant/30 divide-y">
+              <div className="divide-border divide-y">
                 {payments.map((payment) => (
                   <div
                     key={payment.id}
                     onClick={() => router.push(`/payments/${payment.id}`)}
-                    className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-[#222]"
+                    className="hover:bg-surface-container flex cursor-pointer items-center justify-between p-4 transition-colors"
                   >
                     <div>
-                      <p className="text-body-md text-primary font-semibold">
+                      <p className="text-on-surface font-semibold">
                         {payment.mode.replace('_', ' ')}
                       </p>
                       <p className="text-on-surface-variant text-[12px]">
@@ -629,12 +699,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-data-tabular text-primary font-semibold">
+                      <span className="text-on-surface font-mono font-semibold">
                         {formatINR(payment.amount)}
                       </span>
-                      {Number(payment.unallocatedAmount) > 0 && (
-                        <span className="rounded-full bg-amber-400/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-400 uppercase">
-                          {formatINR(payment.unallocatedAmount)} unallocated
+                      {Number(payment.onAccount) > 0 && (
+                        <span className="bg-status-warning/15 text-status-warning rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase">
+                          {formatINR(payment.onAccount)} on account
                         </span>
                       )}
                     </div>
@@ -642,69 +712,129 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 ))}
               </div>
             )}
-          </div>
+          </DetailCard>
         </div>
 
         {/* Right Column - Profile */}
         <div className="flex flex-col gap-6">
-          <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-6">
-            <h2 className="font-title-md text-title-md text-primary mb-5">Profile</h2>
+          <DetailCard title="Profile">
             <div className="space-y-4 text-[13px]">
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">person</span>
-                <span className="text-primary">{customer.contactPerson || 'N/A'}</span>
+                <span className="text-on-surface">{customer.contactPerson || 'N/A'}</span>
               </div>
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">call</span>
-                <span className="text-primary">{customer.phone || 'N/A'}</span>
+                <span className="text-on-surface">{customer.phone || 'N/A'}</span>
               </div>
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">mail</span>
-                <span className="text-primary">{customer.email || 'N/A'}</span>
+                <span className="text-on-surface">{customer.email || 'N/A'}</span>
               </div>
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">location_on</span>
-                <span className="text-primary">{customer.address || 'N/A'}</span>
+                <span className="text-on-surface">{customer.address || 'N/A'}</span>
               </div>
               <div className="text-on-surface-variant flex items-center gap-3">
                 <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                <span className="text-primary font-mono">{customer.gstin || 'Unregistered'}</span>
+                <span className="text-on-surface font-mono">
+                  {customer.gstin || 'Unregistered'}
+                </span>
               </div>
             </div>
-          </div>
+          </DetailCard>
 
-          <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-6">
-            <h2 className="font-title-md text-title-md text-primary mb-5">Financials</h2>
+          <DetailCard title="Financials">
             <div className="space-y-4">
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-on-surface-variant">Outstanding Balance</span>
-                <span className="font-data-tabular font-semibold text-amber-400">
+                <span className="text-status-warning font-mono font-semibold">
                   {formatINR(outstanding)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-[14px]">
-                <span className="text-on-surface-variant">Available Credit</span>
-                <span className="font-data-tabular text-secondary font-semibold">
-                  {formatINR(customer.creditBalance)}
+                <span className="text-on-surface-variant">On-Account Credit</span>
+                <span className="text-accent-cyan font-mono font-semibold">
+                  {formatINR(creditBalance)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-on-surface-variant">Credit Limit</span>
-                <span className="font-data-tabular text-primary">{formatINR(limit)}</span>
+                <span className="text-on-surface font-mono">{formatINR(limit)}</span>
               </div>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#222]">
+              <div className="bg-surface-container-highest mt-2 h-2 w-full overflow-hidden rounded-full">
                 <div
                   className={`h-full rounded-full transition-all duration-1000 ${
-                    outstanding > limit && limit > 0 ? 'bg-error' : 'bg-secondary'
+                    outstanding > limit && limit > 0 ? 'bg-status-error' : 'bg-status-success'
                   }`}
                   style={{ width: `${utilization}%` }}
                 ></div>
               </div>
               {outstanding > limit && limit > 0 && (
-                <p className="text-error text-[12px]">Outstanding balance exceeds credit limit.</p>
+                <p className="text-status-error text-[12px]">
+                  Outstanding balance exceeds credit limit.
+                </p>
               )}
             </div>
-          </div>
+          </DetailCard>
+
+          {/* Billing Mode & Opening Balance */}
+          <DetailCard title="Billing">
+            <div className="mb-5">
+              <p className="text-on-surface-variant mb-2 text-[13px]">Billing Mode</p>
+              <div className="border-border flex overflow-hidden rounded-lg border">
+                {(['BILL_WISE', 'OPEN_BALANCE'] as const).map((mode) => {
+                  const active = (customer.billingMode ?? 'BILL_WISE') === mode;
+                  return (
+                    <button
+                      key={mode}
+                      disabled={savingBillingMode || active}
+                      onClick={() => updateBillingMode(mode)}
+                      className={`flex-1 px-3 py-2 text-[12px] font-semibold transition-colors ${
+                        active
+                          ? 'bg-accent-cyan text-on-secondary'
+                          : 'text-on-surface-variant hover:bg-surface-container-high'
+                      }`}
+                    >
+                      {mode === 'BILL_WISE' ? 'Bill-wise' : 'Open Balance'}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-on-surface-variant mt-2 text-[11px]">
+                Controls the default payment-entry view only. Balances are computed the same way for
+                both modes.
+              </p>
+            </div>
+
+            <div>
+              <p className="text-on-surface-variant mb-2 text-[13px]">Set Opening Balance</p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={openingBalanceInput}
+                  onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                  placeholder="Amount (e.g. historical pending)"
+                  className="bg-surface-container-lowest border-border text-on-surface focus:border-ring rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                />
+                <input
+                  type="date"
+                  value={openingBalanceDate}
+                  onChange={(e) => setOpeningBalanceDate(e.target.value)}
+                  className="bg-surface-container-lowest border-border text-on-surface focus:border-ring rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                />
+                <Button disabled={savingOpeningBalance} onClick={saveOpeningBalance}>
+                  {savingOpeningBalance ? 'Saving…' : 'Save Opening Balance'}
+                </Button>
+              </div>
+              <p className="text-on-surface-variant mt-2 text-[11px]">
+                One-time entry for pending balance carried over from before this system. Editable
+                later; folds into the running balance.
+              </p>
+            </div>
+          </DetailCard>
         </div>
       </div>
 

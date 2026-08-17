@@ -1,5 +1,14 @@
 import prisma from '@/lib/prisma';
+import { Prisma, InvoiceType, RecordStatus } from '@prisma/client';
 import { PeriodRange } from '@/lib/period';
+import { getCustomerPendingTotal, round2 } from '@/lib/balance';
+
+// Revenue/activity reflect real STANDARD, non-voided sales only — OPENING_BALANCE is a
+// migration construct and VOID rows must never count.
+const STANDARD_ACTIVE: Prisma.InvoiceWhereInput = {
+  type: InvoiceType.STANDARD,
+  status: RecordStatus.ACTIVE,
+};
 
 export class DashboardRepository {
   async findSettings() {
@@ -8,25 +17,27 @@ export class DashboardRepository {
 
   async findInvoicesInRange(range: PeriodRange) {
     return prisma.invoice.findMany({
-      where: { date: { gte: range.start, lt: range.end } },
+      where: { date: { gte: range.start, lt: range.end }, ...STANDARD_ACTIVE },
       select: { date: true, totalAmount: true },
     });
   }
 
   async sumPaymentsInRange(range: PeriodRange) {
     const result = await prisma.payment.aggregate({
-      where: { date: { gte: range.start, lt: range.end } },
+      where: { date: { gte: range.start, lt: range.end }, status: RecordStatus.ACTIVE },
       _sum: { amount: true },
     });
     return Number(result._sum.amount ?? 0);
   }
 
+  // Vendor payables is an all-time running balance (total currently owed), so it is
+  // deliberately NOT scoped to the dashboard period — it stays constant when the
+  // This Month/This FY toggle changes, mirroring the customer Outstanding figure.
   // isCancelled purchases don't represent a real payable, so they're excluded here.
-  async findVendorPayablesInRange(range: PeriodRange) {
+  async findVendorPayables() {
     const grouped = await prisma.purchase.groupBy({
       by: ['vendorId'],
       where: {
-        date: { gte: range.start, lt: range.end },
         isCancelled: false,
       },
       _sum: { totalAmount: true, paidAmount: true },
@@ -63,7 +74,10 @@ export class DashboardRepository {
     });
     const categoryByProductId = new Map(products.map((p) => [p.id, p.category]));
 
-    const byCategory = new Map<string, { categoryId: string; categoryName: string; amount: number }>();
+    const byCategory = new Map<
+      string,
+      { categoryId: string; categoryName: string; amount: number }
+    >();
     for (const g of grouped) {
       const category = categoryByProductId.get(g.productId);
       if (!category) continue;
@@ -72,7 +86,11 @@ export class DashboardRepository {
       if (existing) {
         existing.amount += amount;
       } else {
-        byCategory.set(category.id, { categoryId: category.id, categoryName: category.name, amount });
+        byCategory.set(category.id, {
+          categoryId: category.id,
+          categoryName: category.name,
+          amount,
+        });
       }
     }
 
@@ -92,11 +110,59 @@ export class DashboardRepository {
     });
   }
 
-  // Deliberately unfiltered by isActive -- a deactivated customer's debt is still real.
-  async findAllCustomers() {
-    return prisma.customer.findMany({
-      select: { id: true, firmName: true, outstandingBalance: true, creditLimit: true },
+  // Unallocated on-account credit across ALL customers = SUM(ACTIVE payment amounts)
+  // − SUM(allocations directed at an invoice from ACTIVE payments). This mirrors
+  // getPaymentOnAccount() summed over every payment, so it also captures unallocated
+  // remainders that were never written as an explicit null-invoiceId allocation row.
+  // Never period-scoped — it's a live balance.
+  async sumOnAccountCredit() {
+    const [payments, directed] = await Promise.all([
+      prisma.payment.aggregate({
+        where: { status: RecordStatus.ACTIVE },
+        _sum: { amount: true },
+      }),
+      prisma.paymentAllocation.aggregate({
+        where: { invoiceId: { not: null }, payment: { status: RecordStatus.ACTIVE } },
+        _sum: { amount: true },
+      }),
+    ]);
+    const total = Number(payments._sum.amount ?? 0) - Number(directed._sum.amount ?? 0);
+    return Math.max(0, round2(total));
+  }
+
+  // Every ACTIVE invoice (STANDARD + OPENING_BALANCE) with the allocation rows needed to
+  // derive its live balanceDue. Used to bucket receivables by age; never period-scoped.
+  async findOpenInvoicesForAging() {
+    return prisma.invoice.findMany({
+      where: { status: RecordStatus.ACTIVE },
+      select: {
+        date: true,
+        asOfDate: true,
+        totalAmount: true,
+        paymentAllocations: {
+          select: { amount: true, payment: { select: { status: true } } },
+        },
+      },
     });
+  }
+
+  // Deliberately unfiltered by isActive -- a deactivated customer's debt is still real.
+  // outstandingBalance is derived (SUM active invoices − SUM active payments), never stored.
+  async findAllCustomers() {
+    const customers = await prisma.customer.findMany({
+      select: {
+        id: true,
+        firmName: true,
+        creditLimit: true,
+        invoices: { select: { totalAmount: true, status: true } },
+        payments: { select: { amount: true, status: true } },
+      },
+    });
+
+    return customers.map(({ invoices, payments, ...rest }) => ({
+      ...rest,
+      outstandingBalance: getCustomerPendingTotal({ invoices, payments }),
+    }));
   }
 
   async findRecentDispatchEntries(limit: number) {
@@ -116,6 +182,7 @@ export class DashboardRepository {
 
   async findRecentInvoices(limit: number) {
     return prisma.invoice.findMany({
+      where: STANDARD_ACTIVE,
       select: {
         id: true,
         invoiceNo: true,
@@ -130,6 +197,7 @@ export class DashboardRepository {
 
   async findRecentPayments(limit: number) {
     return prisma.payment.findMany({
+      where: { status: RecordStatus.ACTIVE },
       select: {
         id: true,
         amount: true,

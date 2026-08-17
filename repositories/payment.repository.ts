@@ -1,6 +1,14 @@
 import prisma from '@/lib/prisma';
-import { Prisma, PaymentMode, PaymentStatus } from '@prisma/client';
-import { BadRequestError, ConflictError } from '@/lib/errors';
+import { Prisma, PaymentMode, RecordStatus, InvoiceType } from '@prisma/client';
+import { BadRequestError, NotFoundError } from '@/lib/errors';
+import {
+  getInvoiceBalance,
+  getInvoiceDisplayStatus,
+  getPaymentOnAccount,
+  round2,
+  toNumber,
+  type InvoiceDisplayStatus,
+} from '@/lib/balance';
 
 export interface PaymentFilters {
   customerId?: string;
@@ -12,57 +20,24 @@ export interface PaymentFilters {
   take?: number;
 }
 
+export interface AllocationInput {
+  invoiceId: string | null;
+  amount: number;
+  note?: string;
+}
+
 export interface CreatePaymentData {
   customerId: string;
   amount: number;
   mode: PaymentMode;
   date: Date;
   reference?: string;
+  allocations: AllocationInput[];
   recordedById?: string;
-}
-
-export interface AllocationLineInput {
-  paymentId: string;
-  invoiceId: string;
-  amount: number;
-}
-
-export interface AllocateBatchData {
-  idempotencyKey: string;
-  allocations: AllocationLineInput[];
-}
-
-interface UpdatedInvoiceResult {
-  id: string;
-  invoiceNo: string;
-  paidAmount: Prisma.Decimal;
-  paymentStatus: PaymentStatus;
-}
-
-interface UpdatedPaymentResult {
-  id: string;
-  unallocatedAmount: Prisma.Decimal;
-}
-
-interface CreatedAllocationResult {
-  id: string;
-  paymentId: string;
-  invoiceId: string;
-  amount: Prisma.Decimal;
-  createdAt: Date;
-}
-
-export interface AllocateBatchResult {
-  replay: boolean;
-  batchId: string;
-  created: CreatedAllocationResult[];
-  updatedInvoices: UpdatedInvoiceResult[];
-  updatedPayments: UpdatedPaymentResult[];
 }
 
 function buildPaymentWhere(filters: PaymentFilters): Prisma.PaymentWhereInput {
   const { customerId, mode, from, to, search } = filters;
-
   const where: Prisma.PaymentWhereInput = {};
   if (customerId) where.customerId = customerId;
   if (mode) where.mode = mode;
@@ -71,22 +46,108 @@ function buildPaymentWhere(filters: PaymentFilters): Prisma.PaymentWhereInput {
     if (from) where.date.gte = from;
     if (to) where.date.lte = to;
   }
-  if (search) {
-    where.reference = { contains: search, mode: 'insensitive' };
-  }
+  if (search) where.reference = { contains: search, mode: 'insensitive' };
   return where;
+}
+
+/**
+ * Live SUM of allocations against each invoice from ACTIVE payments.
+ * Optionally excludes a payment's own rows (used when re-checking during an allocation edit).
+ */
+async function appliedByInvoice(
+  client: Prisma.TransactionClient,
+  invoiceIds: string[],
+  excludePaymentId?: string
+): Promise<Map<string, number>> {
+  if (invoiceIds.length === 0) return new Map();
+  const rows = await client.paymentAllocation.groupBy({
+    by: ['invoiceId'],
+    where: {
+      invoiceId: { in: invoiceIds },
+      payment: { status: RecordStatus.ACTIVE },
+      ...(excludePaymentId ? { paymentId: { not: excludePaymentId } } : {}),
+    },
+    _sum: { amount: true },
+  });
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    if (row.invoiceId) map.set(row.invoiceId, toNumber(row._sum.amount ?? 0));
+  }
+  return map;
+}
+
+/**
+ * Validate allocation lines against the payment total and each invoice's live balanceDue.
+ * Throws BadRequestError (400) on any violation. Returns nothing; caller writes rows.
+ */
+async function validateAllocations(
+  client: Prisma.TransactionClient,
+  customerId: string,
+  paymentAmount: number,
+  allocations: AllocationInput[],
+  excludePaymentId?: string
+): Promise<void> {
+  const allocTotal = round2(allocations.reduce((sum, a) => sum + a.amount, 0));
+  if (allocTotal > paymentAmount + 0.005) {
+    throw new BadRequestError(
+      `Allocated total (${allocTotal}) exceeds the payment amount (${paymentAmount})`,
+      'ALLOCATION_EXCEEDS_PAYMENT'
+    );
+  }
+
+  const invoiceIds = [
+    ...new Set(allocations.map((a) => a.invoiceId).filter((id): id is string => id !== null)),
+  ];
+  if (invoiceIds.length === 0) return;
+
+  const invoices = await client.invoice.findMany({
+    where: { id: { in: invoiceIds } },
+    select: { id: true, customerId: true, totalAmount: true, status: true },
+  });
+  const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
+  const applied = await appliedByInvoice(client, invoiceIds, excludePaymentId);
+
+  // aggregate requested amount per invoice (a payment could hit the same invoice twice)
+  const requestedByInvoice = new Map<string, number>();
+  for (const a of allocations) {
+    if (a.invoiceId === null) continue;
+    requestedByInvoice.set(a.invoiceId, (requestedByInvoice.get(a.invoiceId) ?? 0) + a.amount);
+  }
+
+  for (const [invoiceId, requested] of requestedByInvoice) {
+    const invoice = invoiceMap.get(invoiceId);
+    if (!invoice) {
+      throw new BadRequestError(`Invoice '${invoiceId}' not found`, 'INVOICE_NOT_FOUND');
+    }
+    if (invoice.status !== RecordStatus.ACTIVE) {
+      throw new BadRequestError(`Invoice '${invoiceId}' is voided`, 'INVOICE_VOIDED');
+    }
+    if (invoice.customerId !== customerId) {
+      throw new BadRequestError(
+        `Invoice '${invoiceId}' belongs to a different customer`,
+        'INVOICE_CUSTOMER_MISMATCH'
+      );
+    }
+    const balanceDue = round2(toNumber(invoice.totalAmount) - (applied.get(invoiceId) ?? 0));
+    if (requested > balanceDue + 0.005) {
+      throw new BadRequestError(
+        `Allocation (${requested}) exceeds invoice '${invoiceId}' balance due (${balanceDue})`,
+        'ALLOCATION_EXCEEDS_INVOICE_BALANCE'
+      );
+    }
+  }
 }
 
 export class PaymentRepository {
   async findAll(filters: PaymentFilters) {
     const where = buildPaymentWhere(filters);
-
     const [data, total] = await Promise.all([
       prisma.payment.findMany({
         where,
         include: {
           customer: { select: { id: true, firmName: true } },
           recordedBy: { select: { id: true, username: true } },
+          allocations: { select: { invoiceId: true, amount: true } },
         },
         orderBy: { date: 'desc' },
         skip: filters.skip,
@@ -95,15 +156,19 @@ export class PaymentRepository {
       prisma.payment.count({ where }),
     ]);
 
-    return { data, total };
+    const mapped = data.map(({ allocations, ...p }) => ({
+      ...p,
+      onAccount: getPaymentOnAccount(p.amount, allocations),
+    }));
+    return { data: mapped, total };
   }
 
-  /** Narrow, unbounded query over the same filters — powers the stat tiles without paging. */
+  /** Narrow rows for the stat tiles — ACTIVE payments only. */
   async findStatsRows(filters: PaymentFilters) {
-    const where = buildPaymentWhere(filters);
+    const where = { ...buildPaymentWhere(filters), status: RecordStatus.ACTIVE };
     return prisma.payment.findMany({
       where,
-      select: { amount: true, unallocatedAmount: true },
+      select: { amount: true, allocations: { select: { invoiceId: true, amount: true } } },
     });
   }
 
@@ -114,9 +179,7 @@ export class PaymentRepository {
         customer: { select: { id: true, firmName: true } },
         recordedBy: { select: { id: true, username: true } },
         allocations: {
-          include: {
-            invoice: { select: { id: true, invoiceNo: true } },
-          },
+          include: { invoice: { select: { id: true, invoiceNo: true, type: true } } },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -124,28 +187,23 @@ export class PaymentRepository {
   }
 
   async findByCustomerId(customerId: string) {
-    return prisma.payment.findMany({
+    const payments = await prisma.payment.findMany({
       where: { customerId },
       select: {
         id: true,
         amount: true,
-        unallocatedAmount: true,
         mode: true,
         reference: true,
+        status: true,
         date: true,
+        allocations: { select: { invoiceId: true, amount: true } },
       },
       orderBy: { date: 'desc' },
     });
-  }
-
-  async findAllocationsByInvoiceId(invoiceId: string) {
-    return prisma.paymentAllocation.findMany({
-      where: { invoiceId },
-      include: {
-        payment: { select: { id: true, mode: true, reference: true, date: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    return payments.map(({ allocations, ...p }) => ({
+      ...p,
+      onAccount: getPaymentOnAccount(p.amount, allocations),
+    }));
   }
 
   async findCustomerById(customerId: string) {
@@ -156,254 +214,279 @@ export class PaymentRepository {
     return prisma.invoice.findUnique({ where: { id: invoiceId } });
   }
 
-  async createPaymentTx(data: CreatePaymentData) {
+  async findAllocationsByInvoiceId(invoiceId: string) {
+    return prisma.paymentAllocation.findMany({
+      where: { invoiceId },
+      include: {
+        payment: { select: { id: true, mode: true, reference: true, date: true, status: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Create a payment and its allocation rows atomically; rolls back on any invariant failure. */
+  async createPaymentWithAllocations(data: CreatePaymentData) {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const payment = await tx.payment.create({
+      await validateAllocations(tx, data.customerId, data.amount, data.allocations);
+
+      return tx.payment.create({
         data: {
           customerId: data.customerId,
           amount: data.amount,
-          unallocatedAmount: data.amount,
           mode: data.mode,
           reference: data.reference,
           date: data.date,
           recordedById: data.recordedById,
+          allocations: {
+            create: data.allocations.map((a) => ({
+              invoiceId: a.invoiceId,
+              amount: a.amount,
+              note: a.note,
+            })),
+          },
         },
         include: {
           recordedBy: { select: { id: true, username: true } },
+          allocations: {
+            include: { invoice: { select: { id: true, invoiceNo: true, type: true } } },
+          },
         },
       });
-
-      await tx.customer.update({
-        where: { id: data.customerId },
-        data: { creditBalance: { increment: data.amount } },
-      });
-
-      return payment;
     });
   }
 
-  async allocateBatch(data: AllocateBatchData): Promise<AllocateBatchResult> {
-    let batch;
-    try {
-      batch = await prisma.allocationBatch.create({
-        data: { idempotencyKey: data.idempotencyKey },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        return this.buildReplayResult(data.idempotencyKey);
-      }
-      throw error;
-    }
-
-    try {
-      const paymentIds = [...new Set(data.allocations.map((a) => a.paymentId))];
-      const invoiceIds = [...new Set(data.allocations.map((a) => a.invoiceId))];
-
-      const [payments, invoices] = await Promise.all([
-        prisma.payment.findMany({ where: { id: { in: paymentIds } } }),
-        prisma.invoice.findMany({ where: { id: { in: invoiceIds } } }),
-      ]);
-      const paymentMap = new Map(payments.map((p) => [p.id, p]));
-      const invoiceMap = new Map(invoices.map((i) => [i.id, i]));
-
-      const failures: {
-        index: number;
-        paymentId: string;
-        invoiceId: string;
-        reason: string;
-      }[] = [];
-
-      data.allocations.forEach((allocation, index) => {
-        if (allocation.amount <= 0) {
-          failures.push({ ...allocation, index, reason: 'AMOUNT_MUST_BE_POSITIVE' });
-          return;
-        }
-        const payment = paymentMap.get(allocation.paymentId);
-        if (!payment) {
-          failures.push({ ...allocation, index, reason: 'PAYMENT_NOT_FOUND' });
-          return;
-        }
-        const invoice = invoiceMap.get(allocation.invoiceId);
-        if (!invoice) {
-          failures.push({ ...allocation, index, reason: 'INVOICE_NOT_FOUND' });
-          return;
-        }
-        if (payment.customerId !== invoice.customerId) {
-          failures.push({ ...allocation, index, reason: 'INVOICE_CUSTOMER_MISMATCH' });
-          return;
-        }
-        if (Number(invoice.paidAmount) >= Number(invoice.totalAmount)) {
-          failures.push({ ...allocation, index, reason: 'INVOICE_ALREADY_PAID' });
-        }
-      });
-
-      if (failures.length > 0) {
-        throw new BadRequestError(
-          'One or more allocations failed validation',
-          failures[0].reason,
-          failures
-        );
+  /** Replace the full allocation set of an existing ACTIVE payment; re-checks invariants. */
+  async updateAllocations(paymentId: string, allocations: AllocationInput[]) {
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const payment = await tx.payment.findUnique({ where: { id: paymentId } });
+      if (!payment) throw new NotFoundError(`Payment with id '${paymentId}' not found`);
+      if (payment.status !== RecordStatus.ACTIVE) {
+        throw new BadRequestError('Cannot edit allocations of a voided payment', 'PAYMENT_VOIDED');
       }
 
-      const created: CreatedAllocationResult[] = [];
-      const updatedInvoiceMap = new Map<string, UpdatedInvoiceResult>();
-      const updatedPaymentMap = new Map<string, UpdatedPaymentResult>();
+      await validateAllocations(
+        tx,
+        payment.customerId,
+        toNumber(payment.amount),
+        allocations,
+        paymentId
+      );
 
-      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        for (const [index, allocation] of data.allocations.entries()) {
-          const invoice = invoiceMap.get(allocation.invoiceId)!;
-          const maxAllowedPaidAmount = Number(invoice.totalAmount) - allocation.amount;
+      await tx.paymentAllocation.deleteMany({ where: { paymentId } });
+      if (allocations.length > 0) {
+        await tx.paymentAllocation.createMany({
+          data: allocations.map((a) => ({
+            paymentId,
+            invoiceId: a.invoiceId,
+            amount: a.amount,
+            note: a.note,
+          })),
+        });
+      }
 
-          // payment and invoice guarded updates touch different rows — safe to run concurrently
-          const [paymentResult, invoiceResult] = await Promise.allSettled([
-            tx.payment.update({
-              where: { id: allocation.paymentId, unallocatedAmount: { gte: allocation.amount } },
-              data: { unallocatedAmount: { decrement: allocation.amount } },
-            }),
-            tx.invoice.update({
-              where: { id: allocation.invoiceId, paidAmount: { lte: maxAllowedPaidAmount } },
-              data: { paidAmount: { increment: allocation.amount } },
-            }),
-          ]);
-
-          if (paymentResult.status === 'rejected') {
-            if (
-              paymentResult.reason instanceof Prisma.PrismaClientKnownRequestError &&
-              paymentResult.reason.code === 'P2025'
-            ) {
-              throw new ConflictError(
-                "Payment's available balance changed before the allocation could be applied; refetch and retry",
-                'ALLOCATION_CONFLICT',
-                [{ ...allocation, index, reason: 'PAYMENT_BALANCE_INSUFFICIENT' }]
-              );
-            }
-            throw paymentResult.reason;
-          }
-          if (invoiceResult.status === 'rejected') {
-            if (
-              invoiceResult.reason instanceof Prisma.PrismaClientKnownRequestError &&
-              invoiceResult.reason.code === 'P2025'
-            ) {
-              throw new ConflictError(
-                "Invoice's outstanding balance changed before the allocation could be applied; refetch and retry",
-                'ALLOCATION_CONFLICT',
-                [{ ...allocation, index, reason: 'INVOICE_BALANCE_INSUFFICIENT' }]
-              );
-            }
-            throw invoiceResult.reason;
-          }
-
-          const updatedPaymentRow = paymentResult.value;
-          const updatedInvoiceRow = invoiceResult.value;
-
-          const newPaidAmount = Number(updatedInvoiceRow.paidAmount);
-          const totalAmount = Number(invoice.totalAmount);
-          const paymentStatus: PaymentStatus =
-            newPaidAmount <= 0 ? 'UNPAID' : newPaidAmount >= totalAmount ? 'PAID' : 'PARTIAL';
-
-          // status update, allocation record, and customer balance touch three different rows
-          const [, allocationRow] = await Promise.all([
-            tx.invoice.update({
-              where: { id: allocation.invoiceId },
-              data: { paymentStatus },
-            }),
-            tx.paymentAllocation.create({
-              data: {
-                paymentId: allocation.paymentId,
-                invoiceId: allocation.invoiceId,
-                batchId: batch.id,
-                amount: allocation.amount,
-              },
-            }),
-            tx.customer.update({
-              where: { id: invoice.customerId },
-              data: {
-                outstandingBalance: { decrement: allocation.amount },
-                creditBalance: { decrement: allocation.amount },
-              },
-            }),
-          ]);
-
-          created.push({
-            id: allocationRow.id,
-            paymentId: allocationRow.paymentId,
-            invoiceId: allocationRow.invoiceId,
-            amount: allocationRow.amount,
-            createdAt: allocationRow.createdAt,
-          });
-          updatedInvoiceMap.set(allocation.invoiceId, {
-            id: updatedInvoiceRow.id,
-            invoiceNo: invoice.invoiceNo,
-            paidAmount: updatedInvoiceRow.paidAmount,
-            paymentStatus,
-          });
-          updatedPaymentMap.set(allocation.paymentId, {
-            id: updatedPaymentRow.id,
-            unallocatedAmount: updatedPaymentRow.unallocatedAmount,
-          });
-        }
+      return tx.payment.findUnique({
+        where: { id: paymentId },
+        include: {
+          allocations: {
+            include: { invoice: { select: { id: true, invoiceNo: true, type: true } } },
+          },
+        },
       });
-
-      return {
-        replay: false,
-        batchId: batch.id,
-        created,
-        updatedInvoices: [...updatedInvoiceMap.values()],
-        updatedPayments: [...updatedPaymentMap.values()],
-      };
-    } catch (error) {
-      await prisma.allocationBatch.delete({ where: { id: batch.id } }).catch(() => undefined);
-      throw error;
-    }
+    });
   }
 
-  private async buildReplayResult(idempotencyKey: string): Promise<AllocateBatchResult> {
-    const batch = await prisma.allocationBatch.findUnique({
-      where: { idempotencyKey },
-      include: {
-        allocations: {
-          include: { invoice: true, payment: true },
+  /** Soft-void: flip status to VOID. Allocation rows are kept; balances revert via SUM exclusion. */
+  async voidPayment(paymentId: string) {
+    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundError(`Payment with id '${paymentId}' not found`);
+    if (payment.status === RecordStatus.VOID) {
+      return payment; // idempotent no-op
+    }
+    return prisma.payment.update({
+      where: { id: paymentId },
+      data: { status: RecordStatus.VOID },
+    });
+  }
+
+  /** STANDARD, ACTIVE invoices with a live balanceDue > 0 — feeds the allocation UI. */
+  async findOpenInvoices(customerId: string) {
+    const invoices = await prisma.invoice.findMany({
+      where: { customerId, type: InvoiceType.STANDARD, status: RecordStatus.ACTIVE },
+      select: {
+        id: true,
+        invoiceNo: true,
+        date: true,
+        totalAmount: true,
+        paymentAllocations: {
+          where: { payment: { status: RecordStatus.ACTIVE } },
+          select: { amount: true },
         },
       },
+      orderBy: { date: 'asc' },
     });
 
-    if (!batch) {
-      throw new ConflictError(
-        'Allocation batch could not be found for idempotent replay',
-        'ALLOCATION_CONFLICT'
-      );
-    }
+    return invoices
+      .map((inv) => {
+        const balanceDue = getInvoiceBalance(
+          inv.totalAmount,
+          inv.paymentAllocations.map((a) => ({
+            amount: a.amount,
+            paymentStatus: RecordStatus.ACTIVE,
+          }))
+        );
+        return {
+          id: inv.id,
+          invoiceNo: inv.invoiceNo,
+          date: inv.date,
+          totalAmount: toNumber(inv.totalAmount),
+          balanceDue,
+        };
+      })
+      .filter((inv) => inv.balanceDue > 0.005);
+  }
 
-    const updatedInvoiceMap = new Map<string, UpdatedInvoiceResult>();
-    const updatedPaymentMap = new Map<string, UpdatedPaymentResult>();
-    const created: CreatedAllocationResult[] = batch.allocations.map((allocation) => ({
-      id: allocation.id,
-      paymentId: allocation.paymentId,
-      invoiceId: allocation.invoiceId,
-      amount: allocation.amount,
-      createdAt: allocation.createdAt,
-    }));
+  /**
+   * Chronological ledger: ACTIVE invoices (debits) and payments (credits) with a running balance,
+   * ordered by asOfDate ?? date ?? createdAt. Voided rows are returned flagged but excluded from
+   * the running balance.
+   */
+  async findLedger(customerId: string) {
+    const [invoices, payments] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { customerId },
+        select: {
+          id: true,
+          invoiceNo: true,
+          type: true,
+          status: true,
+          date: true,
+          asOfDate: true,
+          totalAmount: true,
+          createdAt: true,
+          paymentAllocations: {
+            where: { payment: { status: RecordStatus.ACTIVE } },
+            select: { amount: true },
+          },
+        },
+      }),
+      prisma.payment.findMany({
+        where: { customerId },
+        select: {
+          id: true,
+          amount: true,
+          mode: true,
+          reference: true,
+          status: true,
+          date: true,
+          createdAt: true,
+          allocations: {
+            select: {
+              amount: true,
+              invoice: { select: { id: true, invoiceNo: true } },
+            },
+          },
+        },
+      }),
+    ]);
 
-    for (const allocation of batch.allocations) {
-      updatedInvoiceMap.set(allocation.invoiceId, {
-        id: allocation.invoice.id,
-        invoiceNo: allocation.invoice.invoiceNo,
-        paidAmount: allocation.invoice.paidAmount,
-        paymentStatus: allocation.invoice.paymentStatus,
-      });
-      updatedPaymentMap.set(allocation.paymentId, {
-        id: allocation.payment.id,
-        unallocatedAmount: allocation.payment.unallocatedAmount,
-      });
-    }
-
-    return {
-      replay: true,
-      batchId: batch.id,
-      created,
-      updatedInvoices: [...updatedInvoiceMap.values()],
-      updatedPayments: [...updatedPaymentMap.values()],
+    type LedgerEntry = {
+      kind: 'INVOICE' | 'PAYMENT';
+      id: string;
+      date: Date;
+      sortDate: Date;
+      status: RecordStatus;
+      debit: number;
+      credit: number;
+      running: number;
+      invoice?: {
+        invoiceNo: string | null;
+        type: InvoiceType;
+        totalAmount: number;
+        balanceDue: number;
+        displayStatus: InvoiceDisplayStatus;
+      };
+      payment?: {
+        mode: PaymentMode;
+        reference: string | null;
+        onAccount: number;
+        breakdown: { invoiceId: string | null; invoiceNo: string | null; amount: number }[];
+      };
     };
+
+    const entries: LedgerEntry[] = [];
+
+    for (const inv of invoices) {
+      const balanceDue = getInvoiceBalance(
+        inv.totalAmount,
+        inv.paymentAllocations.map((a) => ({
+          amount: a.amount,
+          paymentStatus: RecordStatus.ACTIVE,
+        }))
+      );
+      entries.push({
+        kind: 'INVOICE',
+        id: inv.id,
+        date: inv.date,
+        sortDate: inv.asOfDate ?? inv.date ?? inv.createdAt,
+        status: inv.status,
+        debit: toNumber(inv.totalAmount),
+        credit: 0,
+        running: 0,
+        invoice: {
+          invoiceNo: inv.invoiceNo,
+          type: inv.type,
+          totalAmount: toNumber(inv.totalAmount),
+          balanceDue,
+          displayStatus: getInvoiceDisplayStatus(inv.totalAmount, balanceDue),
+        },
+      });
+    }
+
+    for (const pay of payments) {
+      entries.push({
+        kind: 'PAYMENT',
+        id: pay.id,
+        date: pay.date,
+        sortDate: pay.date ?? pay.createdAt,
+        status: pay.status,
+        debit: 0,
+        credit: toNumber(pay.amount),
+        running: 0,
+        payment: {
+          mode: pay.mode,
+          reference: pay.reference,
+          onAccount: getPaymentOnAccount(
+            pay.amount,
+            pay.allocations.map((a) => ({
+              invoiceId: a.invoice?.id ?? null,
+              amount: a.amount,
+            }))
+          ),
+          breakdown: pay.allocations.map((a) => ({
+            invoiceId: a.invoice?.id ?? null,
+            invoiceNo: a.invoice?.invoiceNo ?? null,
+            amount: toNumber(a.amount),
+          })),
+        },
+      });
+    }
+
+    entries.sort((a, b) => {
+      const diff = a.sortDate.getTime() - b.sortDate.getTime();
+      if (diff !== 0) return diff;
+      // invoices before payments on the same instant so a same-day payment lands after its invoice
+      return a.kind === b.kind ? 0 : a.kind === 'INVOICE' ? -1 : 1;
+    });
+
+    let running = 0;
+    for (const entry of entries) {
+      if (entry.status === RecordStatus.ACTIVE) {
+        running = round2(running + entry.debit - entry.credit);
+      }
+      entry.running = running;
+    }
+
+    return entries;
   }
 }
 

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DocStatus } from '@prisma/client';
 import { dispatchEntryService } from '@/services/dispatch-entry.service';
+import { settingsService } from '@/services/settings.service';
 import { createDispatchEntrySchema } from '@/validations/dispatch-entry';
-import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
+import { successResponse, paginatedResponse, BadRequestError, AppError } from '@/lib/errors';
 import { parsePagination } from '@/lib/pagination';
+import { renderDispatchSlipPdf } from '@/lib/dispatch-slip-pdf';
 
 export class DispatchEntryController {
   async getAll(req: NextRequest) {
@@ -77,6 +79,57 @@ export class DispatchEntryController {
     };
 
     return successResponse(response);
+  }
+
+  async getSlipPdf(_req: NextRequest, id: string) {
+    const [dispatchEntry, settings] = await Promise.all([
+      dispatchEntryService.getById(id),
+      settingsService.get(),
+    ]);
+
+    if (!settings) {
+      throw new AppError(500, 'Company settings are not configured', 'SETTINGS_NOT_CONFIGURED');
+    }
+
+    const snapshot = {
+      company: {
+        name: settings.companyName,
+        address: settings.companyAddress,
+        state: settings.companyState,
+        gstin: settings.companyGstin,
+        pan: settings.companyPan,
+      },
+      customer: {
+        firmName: dispatchEntry.customer.firmName,
+        state: dispatchEntry.customer.state,
+        gstin: dispatchEntry.customer.gstin,
+      },
+      dispatch: {
+        challanNo: dispatchEntry.challanNo,
+        date: dispatchEntry.date.toISOString(),
+        place: dispatchEntry.place,
+        transport: dispatchEntry.transport ?? null,
+        transportAmount: Number(dispatchEntry.transportAmount ?? 0),
+      },
+      items: dispatchEntry.items.map((item) => ({
+        productName: item.product.name,
+        categoryName: item.product.category.name,
+        quantity: Number(item.quantity),
+        price: Number(item.price),
+        lineTotal: Number(item.lineTotal),
+      })),
+      totalAmount: Number(dispatchEntry.totalAmount),
+    };
+
+    const pdfBuffer = await renderDispatchSlipPdf(snapshot);
+
+    return new NextResponse(new Uint8Array(pdfBuffer), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="challan-${dispatchEntry.challanNo}.pdf"`,
+      },
+    });
   }
 
   async create(req: NextRequest) {

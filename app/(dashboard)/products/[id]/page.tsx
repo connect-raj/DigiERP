@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import { RegistrationMark } from '@/components/ui/RegistrationMark';
+import { DetailCard } from '@/components/ui/DetailCard';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/button';
 
 type StockTxn = {
   id: string;
@@ -107,10 +111,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   if (loading) {
     return (
-      <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
-        <span className="material-symbols-outlined text-secondary animate-spin text-[32px]">
-          progress_activity
-        </span>
+      <div className="flex h-full items-center justify-center p-12">
+        <RegistrationMark size="lg" spinning />
       </div>
     );
   }
@@ -118,14 +120,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   if (error || !product) {
     return (
       <div className="text-on-surface-variant flex h-full flex-col items-center justify-center gap-4 p-12">
-        <span className="material-symbols-outlined text-[48px] text-red-400">error</span>
-        <p className="text-body-lg text-primary font-bold">{error || 'Product not found'}</p>
-        <button
-          onClick={() => router.push('/products')}
-          className="bg-surface-container border-outline-variant text-primary rounded-lg border-[0.5px] px-4 py-2 hover:bg-[#252525]"
-        >
+        <span className="material-symbols-outlined text-status-error text-[48px]">error</span>
+        <p className="text-on-surface font-semibold">{error || 'Product not found'}</p>
+        <Button variant="outline" size="sm" onClick={() => router.push('/products')}>
           Back to Products
-        </button>
+        </Button>
       </div>
     );
   }
@@ -136,16 +135,15 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex flex-col gap-6 pb-12">
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => router.push('/products')}
-          className="bg-surface-container border-outline-variant flex h-9 w-9 items-center justify-center rounded-lg border-[0.5px] hover:bg-[#252525]"
-        >
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="icon" onClick={() => router.push('/products')}>
           <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-        </button>
+        </Button>
         <div>
-          <h1 className="font-headline-md text-headline-md text-primary">{product.name}</h1>
-          <p className="text-on-surface-variant font-data-tabular text-body-sm mt-0.5 uppercase">
+          <h1 className="font-display text-on-surface text-xl font-semibold tracking-tight">
+            {product.name}
+          </h1>
+          <p className="text-on-surface-variant mt-0.5 font-mono text-sm uppercase">
             {product.sku} · {product.category?.name || 'Uncategorized'}
           </p>
         </div>
@@ -153,17 +151,16 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Stock + adjust */}
-        <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-5">
-          <h2 className="font-title-md text-title-md text-primary mb-4">Stock</h2>
+        <DetailCard title="Stock">
           <div className="mb-4 flex items-baseline gap-2">
             <span
-              className={`font-data-tabular text-3xl font-bold ${isLow ? 'text-error' : 'text-primary'}`}
+              className={`font-mono text-3xl font-bold ${isLow ? 'text-status-error' : 'text-on-surface'}`}
             >
               {currentStock}
             </span>
             <span className="text-on-surface-variant text-[13px]">{product.unit}</span>
             {isLow && (
-              <span className="bg-error/10 text-error ml-2 rounded px-2 py-0.5 text-[10px] font-bold uppercase">
+              <span className="bg-status-error/10 text-status-error ml-2 rounded px-2 py-0.5 text-[10px] font-bold uppercase">
                 Low (min {lowerLimit})
               </span>
             )}
@@ -179,38 +176,33 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               value={adjustQty}
               onChange={(e) => setAdjustQty(e.target.value)}
               placeholder="e.g. -5 or 10"
-              className="bg-surface-container-lowest border-outline-variant text-body-sm w-full rounded-lg border-[0.5px] px-3 py-2"
+              className="bg-surface-container-lowest border-border text-on-surface focus:border-ring w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
             />
-            <button
-              disabled={saving}
-              onClick={handleAdjust}
-              className="bg-secondary text-on-secondary rounded-lg px-4 py-2 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
-            >
+            <Button size="sm" disabled={saving} onClick={handleAdjust}>
               {saving ? '…' : 'Apply'}
-            </button>
+            </Button>
           </div>
           <p className="text-on-surface-variant mt-2 text-[11px]">
             Recorded as an ADJUSTMENT stock transaction; cannot drive stock negative.
           </p>
-        </div>
+        </DetailCard>
 
         {/* Vendors */}
-        <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-5">
-          <h2 className="font-title-md text-title-md text-primary mb-4">Vendors</h2>
+        <DetailCard title="Vendors">
           {product.vendorProducts.length === 0 ? (
-            <p className="text-on-surface-variant text-body-sm">No vendors linked.</p>
+            <p className="text-on-surface-variant text-sm">No vendors linked.</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {product.vendorProducts.map((vp) => (
                 <li key={vp.id} className="flex items-center justify-between text-[13px]">
                   <button
                     onClick={() => router.push(`/vendors/${vp.vendor.id}`)}
-                    className="text-primary hover:text-secondary font-medium"
+                    className="text-on-surface hover:text-accent-cyan font-medium"
                   >
                     {vp.vendor.name}
                   </button>
                   {vp.isPreferred && (
-                    <span className="bg-secondary/15 text-secondary rounded-full px-2 py-0.5 text-[10px] font-bold uppercase">
+                    <span className="bg-accent-cyan/15 text-accent-cyan rounded-full px-2 py-0.5 text-[10px] font-bold uppercase">
                       Preferred
                     </span>
                   )}
@@ -218,11 +210,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               ))}
             </ul>
           )}
-        </div>
+        </DetailCard>
 
         {/* Meta */}
-        <div className="bg-surface-container border-outline-variant rounded-2xl border-[0.5px] p-5">
-          <h2 className="font-title-md text-title-md text-primary mb-4">Details</h2>
+        <DetailCard title="Details">
           <dl className="flex flex-col gap-3 text-[13px]">
             {[
               ['Base Price', `₹ ${Number(product.basePrice).toFixed(2)}`],
@@ -232,60 +223,48 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4">
                 <dt className="text-on-surface-variant">{label}</dt>
-                <dd className="text-primary text-right font-medium">{value}</dd>
+                <dd className="text-on-surface text-right font-medium">{value}</dd>
               </div>
             ))}
           </dl>
-        </div>
+        </DetailCard>
       </div>
 
       {/* Stock transactions */}
-      <div className="bg-surface-container border-outline-variant overflow-hidden rounded-2xl border-[0.5px]">
-        <div className="border-outline-variant border-b-[0.5px] p-5">
-          <h2 className="font-title-md text-title-md text-primary flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary">receipt_long</span>
-            Recent Stock Transactions
-          </h2>
-        </div>
+      <DetailCard title="Recent Stock Transactions" contentClassName="p-0">
         {product.stockTxns.length === 0 ? (
-          <p className="text-on-surface-variant text-body-sm p-6 text-center">
-            No stock movements recorded yet.
-          </p>
+          <EmptyState
+            icon={<span className="material-symbols-outlined text-[40px]">receipt_long</span>}
+            title="No stock movements yet"
+            description="Purchases, dispatches, and manual adjustments will appear here."
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left text-sm">
               <thead>
-                <tr className="bg-surface-container-low border-outline-variant border-b-[0.5px]">
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 uppercase">
-                    When
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 uppercase">
-                    Reason
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right uppercase">
-                    Change
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-5 py-3 text-right uppercase">
-                    After
-                  </th>
+                <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                  <th className="px-5 py-3">When</th>
+                  <th className="px-5 py-3">Reason</th>
+                  <th className="px-5 py-3 text-right">Change</th>
+                  <th className="px-5 py-3 text-right">After</th>
                 </tr>
               </thead>
-              <tbody className="divide-outline-variant/30 divide-y">
+              <tbody className="divide-border divide-y">
                 {product.stockTxns.map((txn) => {
                   const change = Number(txn.changeQty);
                   return (
-                    <tr key={txn.id} className="transition-colors hover:bg-[#222]">
+                    <tr key={txn.id} className="hover:bg-surface-container transition-colors">
                       <td className="text-on-surface-variant px-5 py-3 text-[13px]">
                         {formatDateTime(txn.createdAt)}
                       </td>
-                      <td className="text-primary px-5 py-3 text-[13px]">{txn.reason}</td>
+                      <td className="text-on-surface px-5 py-3 text-[13px]">{txn.reason}</td>
                       <td
-                        className={`font-data-tabular px-5 py-3 text-right ${change < 0 ? 'text-error' : 'text-green-400'}`}
+                        className={`px-5 py-3 text-right font-mono ${change < 0 ? 'text-status-error' : 'text-status-success'}`}
                       >
                         {change > 0 ? '+' : ''}
                         {change}
                       </td>
-                      <td className="font-data-tabular text-primary px-5 py-3 text-right">
+                      <td className="text-on-surface px-5 py-3 text-right font-mono">
                         {Number(txn.stockAfter)}
                       </td>
                     </tr>
@@ -295,7 +274,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             </table>
           </div>
         )}
-      </div>
+      </DetailCard>
     </div>
   );
 }

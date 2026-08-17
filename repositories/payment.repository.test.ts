@@ -1,279 +1,174 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Prisma } from '@prisma/client';
-import { paymentRepository, AllocateBatchData, CreatePaymentData } from './payment.repository';
+import { RecordStatus } from '@prisma/client';
+import { paymentRepository, CreatePaymentData } from './payment.repository';
 import prisma from '@/lib/prisma';
-import { BadRequestError, ConflictError } from '@/lib/errors';
+import { BadRequestError, NotFoundError } from '@/lib/errors';
+
+// A single tx client is reused for both the top-level mock and the $transaction callback.
+const txClient = {
+  invoice: { findMany: vi.fn() },
+  paymentAllocation: { groupBy: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
+  payment: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+};
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    payment: {
-      findMany: vi.fn(),
-      count: vi.fn(),
-      findUnique: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-    },
-    invoice: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
-      update: vi.fn(),
-    },
-    customer: {
-      update: vi.fn(),
-      findUnique: vi.fn(),
-    },
-    allocationBatch: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      delete: vi.fn(),
-    },
-    paymentAllocation: {
-      create: vi.fn(),
-      findMany: vi.fn(),
-    },
     $transaction: vi.fn(),
+    payment: { findUnique: vi.fn(), update: vi.fn() },
+    invoice: { findMany: vi.fn() },
+    paymentAllocation: { groupBy: vi.fn() },
   },
 }));
 
-const invoiceRow = {
-  id: 'inv-1',
-  invoiceNo: 'INV-2627-001',
-  customerId: 'cust-1',
-  totalAmount: new Prisma.Decimal(1000),
-  paidAmount: new Prisma.Decimal(0),
-  paymentStatus: 'UNPAID',
-};
+beforeEach(() => {
+  vi.clearAllMocks();
+  // route $transaction(fn) through our controllable tx client
+  vi.mocked(prisma.$transaction).mockImplementation(((fn: (tx: typeof txClient) => unknown) =>
+    fn(txClient)) as never);
+  txClient.paymentAllocation.groupBy.mockResolvedValue([]);
+});
 
-const paymentRow = {
-  id: 'pay-1',
-  customerId: 'cust-1',
-  amount: new Prisma.Decimal(1000),
-  unallocatedAmount: new Prisma.Decimal(1000),
-};
+function baseData(overrides: Partial<CreatePaymentData> = {}): CreatePaymentData {
+  return {
+    customerId: 'cust-1',
+    amount: 8000,
+    mode: 'CASH',
+    date: new Date('2026-07-01'),
+    allocations: [],
+    ...overrides,
+  };
+}
 
-describe('PaymentRepository', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.clearAllMocks();
-    vi.mocked(prisma.$transaction).mockImplementation(
-      (cb: (tx: typeof prisma) => Promise<unknown>) => cb(prisma)
-    );
-    vi.mocked(prisma.allocationBatch.delete).mockResolvedValue({} as never);
+describe('createPaymentWithAllocations', () => {
+  it('rejects when allocated total exceeds the payment amount', async () => {
+    const data = baseData({
+      amount: 5000,
+      allocations: [{ invoiceId: null, amount: 6000 }],
+    });
+    await expect(paymentRepository.createPaymentWithAllocations(data)).rejects.toMatchObject({
+      code: 'ALLOCATION_EXCEEDS_PAYMENT',
+    });
+    expect(txClient.payment.create).not.toHaveBeenCalled();
   });
 
-  describe('findAll', () => {
-    it('filters by reference when search is provided, and returns total count', async () => {
-      vi.mocked(prisma.payment.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.payment.count).mockResolvedValue(4);
-      const result = await paymentRepository.findAll({ search: 'REF-1', skip: 10, take: 10 });
-      expect(prisma.payment.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { reference: { contains: 'REF-1', mode: 'insensitive' } },
-          orderBy: { date: 'desc' },
-          skip: 10,
-          take: 10,
-        })
-      );
-      expect(result).toEqual({ data: [], total: 4 });
+  it('rejects when an allocation exceeds the invoice balance due', async () => {
+    txClient.invoice.findMany.mockResolvedValue([
+      { id: 'inv-1', customerId: 'cust-1', totalAmount: 3000, status: RecordStatus.ACTIVE },
+    ]);
+    txClient.paymentAllocation.groupBy.mockResolvedValue([
+      { invoiceId: 'inv-1', _sum: { amount: 2500 } }, // 500 already left
+    ]);
+    const data = baseData({
+      amount: 8000,
+      allocations: [{ invoiceId: 'inv-1', amount: 2000 }],
+    });
+    await expect(paymentRepository.createPaymentWithAllocations(data)).rejects.toMatchObject({
+      code: 'ALLOCATION_EXCEEDS_INVOICE_BALANCE',
     });
   });
 
-  describe('findStatsRows', () => {
-    it('selects only the fields needed for stat aggregation, unbounded', async () => {
-      vi.mocked(prisma.payment.findMany).mockResolvedValue([]);
-      await paymentRepository.findStatsRows({ customerId: 'cust-1' });
-      expect(prisma.payment.findMany).toHaveBeenCalledWith({
-        where: { customerId: 'cust-1' },
-        select: { amount: true, unallocatedAmount: true },
-      });
+  it('rejects an invoice belonging to a different customer', async () => {
+    txClient.invoice.findMany.mockResolvedValue([
+      { id: 'inv-1', customerId: 'other', totalAmount: 3000, status: RecordStatus.ACTIVE },
+    ]);
+    const data = baseData({ allocations: [{ invoiceId: 'inv-1', amount: 1000 }] });
+    await expect(paymentRepository.createPaymentWithAllocations(data)).rejects.toMatchObject({
+      code: 'INVOICE_CUSTOMER_MISMATCH',
     });
   });
 
-  describe('createPaymentTx', () => {
-    it('creates the payment with unallocatedAmount = amount and increments Customer.creditBalance', async () => {
-      const data: CreatePaymentData = {
+  it('creates the payment + allocations for the ₹8,000 mixed split (₹2,000 + ₹6,000 on-account)', async () => {
+    txClient.invoice.findMany.mockResolvedValue([
+      { id: 'inv-1', customerId: 'cust-1', totalAmount: 2000, status: RecordStatus.ACTIVE },
+    ]);
+    txClient.payment.create.mockResolvedValue({ id: 'pay-1' });
+
+    const data = baseData({
+      amount: 8000,
+      allocations: [
+        { invoiceId: 'inv-1', amount: 2000 },
+        { invoiceId: null, amount: 6000 },
+      ],
+    });
+    await paymentRepository.createPaymentWithAllocations(data);
+
+    expect(txClient.payment.create).toHaveBeenCalledTimes(1);
+    const arg = txClient.payment.create.mock.calls[0][0];
+    expect(arg.data.amount).toBe(8000);
+    expect(arg.data.allocations.create).toEqual([
+      expect.objectContaining({ invoiceId: 'inv-1', amount: 2000 }),
+      expect.objectContaining({ invoiceId: null, amount: 6000 }),
+    ]);
+  });
+
+  it('allows an unallocated remainder (no forced full allocation)', async () => {
+    txClient.payment.create.mockResolvedValue({ id: 'pay-1' });
+    const data = baseData({ amount: 8000, allocations: [] });
+    await expect(paymentRepository.createPaymentWithAllocations(data)).resolves.toBeDefined();
+    expect(txClient.payment.create).toHaveBeenCalled();
+  });
+});
+
+describe('voidPayment', () => {
+  it('throws NotFound when the payment does not exist', async () => {
+    vi.mocked(prisma.payment.findUnique).mockResolvedValue(null);
+    await expect(paymentRepository.voidPayment('missing')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('is an idempotent no-op when already voided', async () => {
+    vi.mocked(prisma.payment.findUnique).mockResolvedValue({
+      id: 'pay-1',
+      status: RecordStatus.VOID,
+    } as never);
+    await paymentRepository.voidPayment('pay-1');
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
+  it('flips an ACTIVE payment to VOID', async () => {
+    vi.mocked(prisma.payment.findUnique).mockResolvedValue({
+      id: 'pay-1',
+      status: RecordStatus.ACTIVE,
+    } as never);
+    vi.mocked(prisma.payment.update).mockResolvedValue({ id: 'pay-1' } as never);
+    await paymentRepository.voidPayment('pay-1');
+    expect(prisma.payment.update).toHaveBeenCalledWith({
+      where: { id: 'pay-1' },
+      data: { status: RecordStatus.VOID },
+    });
+  });
+});
+
+describe('updateAllocations', () => {
+  it('rejects editing a voided payment', async () => {
+    txClient.payment.findUnique.mockResolvedValue({
+      id: 'pay-1',
+      customerId: 'cust-1',
+      amount: 8000,
+      status: RecordStatus.VOID,
+    });
+    await expect(
+      paymentRepository.updateAllocations('pay-1', [{ invoiceId: null, amount: 100 }])
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('replaces the allocation set for an ACTIVE payment', async () => {
+    txClient.payment.findUnique
+      .mockResolvedValueOnce({
+        id: 'pay-1',
         customerId: 'cust-1',
-        amount: 500,
-        mode: 'BANK_TRANSFER',
-        date: new Date('2026-07-01'),
-        reference: 'REF-1',
-        recordedById: 'user-1',
-      };
-      vi.mocked(prisma.payment.create).mockResolvedValue({ id: 'pay-1', ...data } as never);
+        amount: 8000,
+        status: RecordStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({ id: 'pay-1', allocations: [] });
+    txClient.invoice.findMany.mockResolvedValue([
+      { id: 'inv-2', customerId: 'cust-1', totalAmount: 6000, status: RecordStatus.ACTIVE },
+    ]);
 
-      await paymentRepository.createPaymentTx(data);
+    await paymentRepository.updateAllocations('pay-1', [{ invoiceId: 'inv-2', amount: 6000 }]);
 
-      expect(prisma.payment.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            customerId: 'cust-1',
-            amount: 500,
-            unallocatedAmount: 500,
-            recordedById: 'user-1',
-          }),
-        })
-      );
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: 'cust-1' },
-        data: { creditBalance: { increment: 500 } },
-      });
+    expect(txClient.paymentAllocation.deleteMany).toHaveBeenCalledWith({
+      where: { paymentId: 'pay-1' },
     });
-  });
-
-  describe('allocateBatch', () => {
-    const baseData: AllocateBatchData = {
-      idempotencyKey: 'idem-1',
-      allocations: [{ paymentId: 'pay-1', invoiceId: 'inv-1', amount: 1000 }],
-    };
-
-    it('replays an existing batch instead of reprocessing when idempotencyKey already exists (P2002)', async () => {
-      vi.mocked(prisma.allocationBatch.create).mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-          code: 'P2002',
-          clientVersion: '6.19.3',
-        })
-      );
-      vi.mocked(prisma.allocationBatch.findUnique).mockResolvedValue({
-        id: 'batch-1',
-        idempotencyKey: 'idem-1',
-        allocations: [
-          {
-            id: 'alloc-1',
-            paymentId: 'pay-1',
-            invoiceId: 'inv-1',
-            amount: new Prisma.Decimal(1000),
-            createdAt: new Date('2026-07-01'),
-            invoice: { ...invoiceRow, paymentStatus: 'PAID' },
-            payment: { ...paymentRow, unallocatedAmount: new Prisma.Decimal(0) },
-          },
-        ],
-      } as never);
-
-      const result = await paymentRepository.allocateBatch(baseData);
-
-      expect(result.replay).toBe(true);
-      expect(result.created).toHaveLength(1);
-      expect(result.updatedInvoices[0]).toMatchObject({ id: 'inv-1', paymentStatus: 'PAID' });
-      expect(prisma.payment.update).not.toHaveBeenCalled();
-    });
-
-    it('fast-fails with INVOICE_CUSTOMER_MISMATCH and rolls back the batch', async () => {
-      vi.mocked(prisma.allocationBatch.create).mockResolvedValue({
-        id: 'batch-1',
-        idempotencyKey: 'idem-1',
-      } as never);
-      vi.mocked(prisma.payment.findMany).mockResolvedValue([paymentRow] as never);
-      vi.mocked(prisma.invoice.findMany).mockResolvedValue([
-        { ...invoiceRow, customerId: 'cust-2' },
-      ] as never);
-
-      await expect(paymentRepository.allocateBatch(baseData)).rejects.toMatchObject({
-        code: 'INVOICE_CUSTOMER_MISMATCH',
-      });
-      await expect(paymentRepository.allocateBatch(baseData)).rejects.toBeInstanceOf(
-        BadRequestError
-      );
-      expect(prisma.allocationBatch.delete).toHaveBeenCalledWith({ where: { id: 'batch-1' } });
-    });
-
-    it('fast-fails with INVOICE_ALREADY_PAID and rolls back the batch', async () => {
-      vi.mocked(prisma.allocationBatch.create).mockResolvedValue({
-        id: 'batch-1',
-        idempotencyKey: 'idem-1',
-      } as never);
-      vi.mocked(prisma.payment.findMany).mockResolvedValue([paymentRow] as never);
-      vi.mocked(prisma.invoice.findMany).mockResolvedValue([
-        { ...invoiceRow, paidAmount: new Prisma.Decimal(1000) },
-      ] as never);
-
-      await expect(paymentRepository.allocateBatch(baseData)).rejects.toMatchObject({
-        code: 'INVOICE_ALREADY_PAID',
-      });
-      expect(prisma.allocationBatch.delete).toHaveBeenCalledWith({ where: { id: 'batch-1' } });
-    });
-
-    it('returns ALLOCATION_CONFLICT and rolls back the batch when the payment balance changed concurrently', async () => {
-      vi.mocked(prisma.allocationBatch.create).mockResolvedValue({
-        id: 'batch-1',
-        idempotencyKey: 'idem-1',
-      } as never);
-      vi.mocked(prisma.payment.findMany).mockResolvedValue([paymentRow] as never);
-      vi.mocked(prisma.invoice.findMany).mockResolvedValue([invoiceRow] as never);
-      vi.mocked(prisma.payment.update).mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('Record not found', {
-          code: 'P2025',
-          clientVersion: '6.19.3',
-        })
-      );
-      vi.mocked(prisma.invoice.update).mockResolvedValue({
-        ...invoiceRow,
-        paidAmount: new Prisma.Decimal(1000),
-      } as never);
-
-      await expect(paymentRepository.allocateBatch(baseData)).rejects.toMatchObject({
-        code: 'ALLOCATION_CONFLICT',
-      });
-      await expect(paymentRepository.allocateBatch(baseData)).rejects.toBeInstanceOf(ConflictError);
-      expect(prisma.allocationBatch.delete).toHaveBeenCalledWith({ where: { id: 'batch-1' } });
-    });
-
-    it('applies the full allocation on the happy path and marks the invoice PAID', async () => {
-      vi.mocked(prisma.allocationBatch.create).mockResolvedValue({
-        id: 'batch-1',
-        idempotencyKey: 'idem-1',
-      } as never);
-      vi.mocked(prisma.payment.findMany).mockResolvedValue([paymentRow] as never);
-      vi.mocked(prisma.invoice.findMany).mockResolvedValue([invoiceRow] as never);
-      vi.mocked(prisma.payment.update).mockResolvedValue({
-        ...paymentRow,
-        unallocatedAmount: new Prisma.Decimal(0),
-      } as never);
-      vi.mocked(prisma.invoice.update).mockImplementation(((args: {
-        data: { paidAmount?: unknown; paymentStatus?: string };
-      }) => {
-        const { data } = args;
-        if (data.paidAmount) {
-          return Promise.resolve({ ...invoiceRow, paidAmount: new Prisma.Decimal(1000) });
-        }
-        return Promise.resolve({ ...invoiceRow, paidAmount: new Prisma.Decimal(1000), ...data });
-      }) as never);
-      vi.mocked(prisma.paymentAllocation.create).mockResolvedValue({
-        id: 'alloc-1',
-        paymentId: 'pay-1',
-        invoiceId: 'inv-1',
-        batchId: 'batch-1',
-        amount: new Prisma.Decimal(1000),
-        createdAt: new Date('2026-07-01'),
-      } as never);
-
-      const result = await paymentRepository.allocateBatch(baseData);
-
-      expect(prisma.payment.update).toHaveBeenCalledWith({
-        where: { id: 'pay-1', unallocatedAmount: { gte: 1000 } },
-        data: { unallocatedAmount: { decrement: 1000 } },
-      });
-      expect(prisma.invoice.update).toHaveBeenCalledWith({
-        where: { id: 'inv-1', paidAmount: { lte: 0 } },
-        data: { paidAmount: { increment: 1000 } },
-      });
-      expect(prisma.invoice.update).toHaveBeenCalledWith({
-        where: { id: 'inv-1' },
-        data: { paymentStatus: 'PAID' },
-      });
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: 'cust-1' },
-        data: {
-          outstandingBalance: { decrement: 1000 },
-          creditBalance: { decrement: 1000 },
-        },
-      });
-      expect(result.replay).toBe(false);
-      expect(result.created).toHaveLength(1);
-      expect(result.updatedInvoices[0]).toMatchObject({ id: 'inv-1', paymentStatus: 'PAID' });
-      expect(result.updatedPayments[0]).toMatchObject({ id: 'pay-1' });
-      expect(prisma.allocationBatch.delete).not.toHaveBeenCalled();
-    });
+    expect(txClient.paymentAllocation.createMany).toHaveBeenCalled();
   });
 });

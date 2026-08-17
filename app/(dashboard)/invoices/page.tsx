@@ -1,8 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { ColumnDef } from '@tanstack/react-table';
 import Pagination from '@/components/ui/Pagination';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
+import { StatusPill, type Status } from '@/components/ui/StatusPill';
 
 type InvoiceCustomer = { id: string; firmName: string };
 
@@ -16,7 +22,7 @@ type Invoice = {
   totalCgst: string | number;
   totalSgst: string | number;
   totalIgst: string | number;
-  paidAmount: string | number;
+  balanceDue: string | number;
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
 };
 
@@ -40,26 +46,22 @@ function formatDate(val: string) {
   });
 }
 
-const paymentStatusColor = (status: string) => {
-  switch (status) {
-    case 'PAID':
-      return 'bg-secondary/15 text-secondary border-secondary/30';
-    case 'PARTIAL':
-      return 'bg-orange-400/15 text-orange-400 border-orange-400/30';
-    default:
-      return 'bg-error/15 text-error border-error/30';
-  }
-};
-
-export default function InvoicesPage() {
+function InvoicesContent() {
   const router = useRouter();
+  // Seed filters from the URL so deep links (dashboard "Outstanding" tile → ?paymentStatus,
+  // customer detail → ?customerId) land pre-filtered. useSearchParams is consistent across
+  // SSR + client navigation, unlike reading window.location in a useState initializer (which
+  // silently loses the filter on refresh/bookmark).
+  const searchParams = useSearchParams();
+  const customerParam = searchParams.get('customerId');
+  const statusParam = searchParams.get('paymentStatus');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [customerFilter, setCustomerFilter] = useState(customerParam || 'All');
+  const [statusFilter, setStatusFilter] = useState(statusParam || 'ALL');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
@@ -70,6 +72,15 @@ export default function InvoicesPage() {
     paid: 0,
     pendingCount: 0,
   });
+
+  // Re-seed filters when the URL query changes. Query-only navigation does not remount the
+  // page, so the initializers above run only once — this keeps filters in sync with deep links.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCustomerFilter(customerParam || 'All');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStatusFilter(statusParam || 'ALL');
+  }, [customerParam, statusParam]);
 
   useEffect(() => {
     // Filter dropdown needs the full list, not a paginated page.
@@ -125,212 +136,241 @@ export default function InvoicesPage() {
     fetchInvoices();
   }, [search, customerFilter, statusFilter, fromDate, toDate, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const columns = useMemo<ColumnDef<Invoice, unknown>[]>(
+    () => [
+      {
+        id: 'invoiceNo',
+        accessorFn: (inv) => inv.invoiceNo,
+        header: 'Invoice No',
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold">{row.original.invoiceNo}</span>
+        ),
+      },
+      {
+        id: 'date',
+        accessorFn: (inv) => new Date(inv.date).getTime(),
+        header: 'Date',
+        cell: ({ row }) => (
+          <span className="text-on-surface-variant">{formatDate(row.original.date)}</span>
+        ),
+      },
+      {
+        id: 'customer',
+        accessorFn: (inv) => inv.customer.firmName,
+        header: 'Customer',
+        cell: ({ row }) => <span className="font-medium">{row.original.customer.firmName}</span>,
+      },
+      {
+        id: 'balanceDue',
+        accessorFn: (inv) => Number(inv.balanceDue),
+        header: 'Balance Due',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span
+            className={
+              Number(row.original.balanceDue) > 0
+                ? 'text-status-error font-mono font-medium'
+                : 'text-on-surface-variant font-mono'
+            }
+          >
+            {formatINR(row.original.balanceDue)}
+          </span>
+        ),
+      },
+      {
+        id: 'totalAmount',
+        accessorFn: (inv) => Number(inv.totalAmount),
+        header: 'Total Amount',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold">{formatINR(row.original.totalAmount)}</span>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (inv) => inv.paymentStatus,
+        header: 'Status',
+        cell: ({ row }) => <StatusPill status={row.original.paymentStatus as Status} />,
+      },
+    ],
+    []
+  );
+
   return (
     <div className="flex min-h-full flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative w-full sm:w-[280px]">
-            <span className="material-symbols-outlined text-on-surface-variant absolute top-1/2 left-3 -translate-y-1/2 text-[20px]">
-              search
-            </span>
-            <input
-              className="bg-surface-container-lowest border-outline-variant text-body-md focus:border-primary w-full rounded border-[0.5px] px-10 py-2 transition-colors focus:outline-none"
-              placeholder="Search invoice no..."
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select
-            value={customerFilter}
-            onChange={(e) => setCustomerFilter(e.target.value)}
-            className="bg-surface-container-lowest border-outline-variant text-body-md text-on-surface-variant cursor-pointer rounded border-[0.5px] px-3 py-2 focus:outline-none"
-          >
-            <option value="All">All Customers</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.firmName}
-              </option>
-            ))}
-          </select>
-          <div className="border-outline-variant flex overflow-hidden rounded border-[0.5px]">
-            {['ALL', 'UNPAID', 'PARTIAL', 'PAID'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`text-label-caps border-outline-variant border-r-[0.5px] px-3 py-2 uppercase transition-colors last:border-r-0 ${
-                  statusFilter === status
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant'
-                }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
-          <div className="bg-surface-container-lowest border-outline-variant flex items-center gap-2 rounded border-[0.5px] px-3 py-2">
-            <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
-              calendar_today
-            </span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="text-body-md text-on-surface w-32 border-none bg-transparent p-0 focus:ring-0"
-            />
-            <span className="text-on-surface-variant">-</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="text-body-md text-on-surface w-32 border-none bg-transparent p-0 focus:ring-0"
-            />
-          </div>
-        </div>
-        <button
-          onClick={() => router.push('/invoices/new')}
-          className="bg-primary text-on-primary flex items-center justify-center gap-2 rounded px-6 py-2.5 font-bold shadow-lg transition-transform active:scale-95"
-        >
-          <span className="material-symbols-outlined text-[20px]">add</span>
-          Create Invoice
-        </button>
-      </div>
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search invoice no..."
+        filters={
+          <>
+            <FilterSelect
+              value={customerFilter}
+              onChange={(e) => setCustomerFilter(e.target.value)}
+            >
+              <option value="All">All Customers</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.firmName}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="ALL">All Statuses</option>
+              <option value="UNPAID">Unpaid</option>
+              <option value="PARTIAL">Partial</option>
+              <option value="PAID">Paid</option>
+            </FilterSelect>
+            <div className="bg-surface-container-low border-border flex h-9 items-center gap-2 rounded-lg border px-3">
+              <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
+                calendar_today
+              </span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="text-on-surface w-28 border-none bg-transparent p-0 text-sm focus:ring-0 focus:outline-none"
+              />
+              <span className="text-on-surface-variant">–</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="text-on-surface w-28 border-none bg-transparent p-0 text-sm focus:ring-0 focus:outline-none"
+              />
+            </div>
+          </>
+        }
+        actions={
+          <Button onClick={() => router.push('/invoices/new')}>
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Create Invoice
+          </Button>
+        }
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-          <p className="text-label-caps text-on-surface-variant mb-1">Total Invoiced</p>
-          <p className="font-display text-headline-md text-primary">
+        <div className="bg-surface-container-low border-border rounded-xl border p-5">
+          <p className="text-on-surface-variant mb-1 text-[11px] font-medium tracking-widest uppercase">
+            Total Invoiced
+          </p>
+          <p className="text-on-surface font-mono text-xl font-semibold">
             {formatINR(stats.totalInvoiced)}
           </p>
         </div>
-        <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-          <p className="text-label-caps text-on-surface-variant mb-1">Outstanding</p>
-          <p className="font-display text-headline-md text-error">{formatINR(stats.outstanding)}</p>
+        <div className="bg-surface-container-low border-border rounded-xl border p-5">
+          <p className="text-on-surface-variant mb-1 text-[11px] font-medium tracking-widest uppercase">
+            Outstanding
+          </p>
+          <p className="text-status-error font-mono text-xl font-semibold">
+            {formatINR(stats.outstanding)}
+          </p>
         </div>
-        <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-          <p className="text-label-caps text-on-surface-variant mb-1">Paid</p>
-          <p className="font-display text-headline-md text-secondary">{formatINR(stats.paid)}</p>
+        <div className="bg-surface-container-low border-border rounded-xl border p-5">
+          <p className="text-on-surface-variant mb-1 text-[11px] font-medium tracking-widest uppercase">
+            Paid
+          </p>
+          <p className="text-status-success font-mono text-xl font-semibold">
+            {formatINR(stats.paid)}
+          </p>
         </div>
-        <div className="bg-surface-container-low border-outline-variant border-[0.5px] p-5">
-          <p className="text-label-caps text-on-surface-variant mb-1">Pending Invoices</p>
-          <p className="font-display text-headline-md text-primary">{stats.pendingCount}</p>
+        <div className="bg-surface-container-low border-border rounded-xl border p-5">
+          <p className="text-on-surface-variant mb-1 text-[11px] font-medium tracking-widest uppercase">
+            Pending Invoices
+          </p>
+          <p className="text-on-surface font-mono text-xl font-semibold">{stats.pendingCount}</p>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-surface-container border-outline-variant flex flex-1 flex-col overflow-hidden rounded-lg border-[0.5px]">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="bg-surface-container-high text-label-caps text-on-surface-variant border-outline-variant border-b-[0.5px] tracking-widest uppercase">
-                <th className="px-6 py-4 font-bold">Invoice No</th>
-                <th className="px-6 py-4 font-bold">Date</th>
-                <th className="px-6 py-4 font-bold">Customer</th>
-                <th className="px-6 py-4 text-right font-bold">CGST</th>
-                <th className="px-6 py-4 text-right font-bold">SGST</th>
-                <th className="px-6 py-4 text-right font-bold">IGST</th>
-                <th className="px-6 py-4 text-right font-bold">Total Amount</th>
-                <th className="px-6 py-4 font-bold">Status</th>
-                <th className="px-6 py-4 text-right font-bold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-outline-variant text-data-tabular divide-y-[0.5px]">
-              {loading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i}>
-                    {Array.from({ length: 9 }).map((__, j) => (
-                      <td key={j} className="px-6 py-4">
-                        <div className="bg-surface-variant h-4 w-full max-w-[100px] animate-pulse rounded" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : pagination.total === 0 ? (
-                <tr>
-                  <td colSpan={9} className="p-12 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="material-symbols-outlined text-on-surface-variant text-[40px]">
-                        receipt_long
-                      </span>
-                      <p className="text-body-md text-on-surface-variant">No invoices found.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                invoices.map((invoice) => (
-                  <tr key={invoice.id} className="bg-surface transition-colors hover:bg-[#1e1e1e]">
-                    <td className="text-primary px-6 py-4 font-mono">{invoice.invoiceNo}</td>
-                    <td className="text-on-surface-variant px-6 py-4">
-                      {formatDate(invoice.date)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => router.push(`/customers/${invoice.customer.id}`)}
-                        className="text-secondary transition-all hover:underline"
-                      >
-                        {invoice.customer.firmName}
-                      </button>
-                    </td>
-                    <td className="text-on-surface-variant px-6 py-4 text-right">
-                      {Number(invoice.totalCgst) > 0 ? formatINR(invoice.totalCgst) : '—'}
-                    </td>
-                    <td className="text-on-surface-variant px-6 py-4 text-right">
-                      {Number(invoice.totalSgst) > 0 ? formatINR(invoice.totalSgst) : '—'}
-                    </td>
-                    <td className="text-on-surface-variant px-6 py-4 text-right">
-                      {Number(invoice.totalIgst) > 0 ? formatINR(invoice.totalIgst) : '—'}
-                    </td>
-                    <td className="text-primary px-6 py-4 text-right font-bold">
-                      {formatINR(invoice.totalAmount)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`rounded-full border-[0.5px] px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${paymentStatusColor(invoice.paymentStatus)}`}
-                      >
-                        {invoice.paymentStatus}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-3">
-                        <button
-                          onClick={() => router.push(`/invoices/${invoice.id}`)}
-                          className="text-on-surface-variant hover:text-primary transition-colors"
-                          title="View Detail"
-                        >
-                          <span className="material-symbols-outlined text-[20px]">visibility</span>
-                        </button>
-                        <a
-                          href={`/api/invoices/${invoice.id}/pdf`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-on-surface-variant hover:text-primary transition-colors"
-                          title="Download PDF"
-                        >
-                          <span className="material-symbols-outlined text-[20px]">
-                            picture_as_pdf
-                          </span>
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {!loading && (
-          <Pagination
-            page={page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
-            limit={PAGE_LIMIT}
-            onPageChange={setPage}
+      <DataTable
+        columns={columns}
+        data={invoices}
+        getRowId={(inv) => inv.id}
+        loading={loading}
+        emptyState={
+          <EmptyState
+            icon={<span className="material-symbols-outlined text-[40px]">receipt_long</span>}
+            title="No invoices found"
+            description="Create an invoice or adjust your filters to see results."
           />
+        }
+        renderExpanded={(invoice) => (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-on-surface-variant text-xs">CGST</dt>
+                <dd className="font-mono">
+                  {Number(invoice.totalCgst) > 0 ? formatINR(invoice.totalCgst) : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant text-xs">SGST</dt>
+                <dd className="font-mono">
+                  {Number(invoice.totalSgst) > 0 ? formatINR(invoice.totalSgst) : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant text-xs">IGST</dt>
+                <dd className="font-mono">
+                  {Number(invoice.totalIgst) > 0 ? formatINR(invoice.totalIgst) : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-on-surface-variant text-xs">Balance Due</dt>
+                <dd className="font-mono">{formatINR(invoice.balanceDue)}</dd>
+              </div>
+            </dl>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a
+                  href={`/api/invoices/${invoice.id}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+                  PDF
+                </a>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/invoices/${invoice.id}`);
+                }}
+              >
+                View detail
+              </Button>
+            </div>
+          </div>
         )}
-      </div>
+        footer={
+          !loading && (
+            <Pagination
+              page={page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={PAGE_LIMIT}
+              onPageChange={setPage}
+            />
+          )
+        }
+      />
     </div>
+  );
+}
+
+export default function InvoicesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-on-surface-variant flex h-full items-center justify-center p-12">
+          Loading...
+        </div>
+      }
+    >
+      <InvoicesContent />
+    </Suspense>
   );
 }

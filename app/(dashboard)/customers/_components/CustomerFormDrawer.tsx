@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { FieldLabel, FormField, SubmitError, TextInput } from '@/components/ui/form';
 
 export type Customer = {
   id: string;
@@ -12,8 +13,9 @@ export type Customer = {
   gstin?: string | null;
   phone?: string | null;
   email?: string | null;
-  outstandingBalance: string | number;
-  creditBalance: string | number;
+  billingMode?: 'BILL_WISE' | 'OPEN_BALANCE';
+  // derived: positive = owed by customer, negative = on-account credit
+  pendingTotal?: string | number;
   creditLimit: string | number;
 };
 
@@ -187,158 +189,120 @@ export default function CustomerFormDrawer({
           id="customer-form"
         >
           <div className="flex-1 space-y-6 p-6">
-            {editingCustomer && (
-              <div className="bg-surface-container-lowest border-outline-variant rounded border-[0.5px] p-4">
-                <p className="text-body-md text-on-surface-variant">
-                  Outstanding Balance:{' '}
-                  <span className="font-bold text-amber-400">
-                    {formatINR(editingCustomer.outstandingBalance)}
-                  </span>
-                </p>
-                <p className="text-body-md text-on-surface-variant mt-1">
-                  Available Credit:{' '}
-                  <span className="text-secondary font-bold">
-                    {formatINR(editingCustomer.creditBalance)}
-                  </span>
-                </p>
-                <p className="text-on-surface-variant mt-1 text-[12px] opacity-70">
-                  Updated automatically from invoices and payments — not editable here.
-                </p>
-              </div>
-            )}
+            {editingCustomer &&
+              (() => {
+                const pending = Number(editingCustomer.pendingTotal ?? 0);
+                return (
+                  <div className="bg-surface-container-lowest border-outline-variant rounded border-[0.5px] p-4">
+                    <p className="text-body-md text-on-surface-variant">
+                      Outstanding Balance:{' '}
+                      <span className="font-bold text-amber-400">
+                        {formatINR(Math.max(0, pending))}
+                      </span>
+                    </p>
+                    <p className="text-body-md text-on-surface-variant mt-1">
+                      On-Account Credit:{' '}
+                      <span className="text-secondary font-bold">
+                        {formatINR(Math.max(0, -pending))}
+                      </span>
+                    </p>
+                    <p className="text-on-surface-variant mt-1 text-[12px] opacity-70">
+                      Derived live from invoices and payments — not editable here.
+                    </p>
+                  </div>
+                );
+              })()}
 
-            {submitError && (
-              <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-red-400">
-                <span className="material-symbols-outlined mt-0.5 text-[18px]">error</span>
-                <p className="text-body-sm">{submitError}</p>
-              </div>
-            )}
+            <SubmitError>{submitError}</SubmitError>
 
             <div className="space-y-4">
-              <label className="font-label-caps text-label-caps text-on-surface-variant block uppercase">
-                General Information
-              </label>
-              <div className="space-y-1.5">
-                <span className="text-body-md text-on-surface-variant">Firm Name *</span>
-                <input
-                  className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
-                  type="text"
+              <FieldLabel className="tracking-widest uppercase">General Information</FieldLabel>
+              <FormField label="Firm Name" required error={errors.firmName}>
+                <TextInput
                   placeholder="e.g. Shree Ganesh Printers"
                   value={form.firmName}
+                  invalid={!!errors.firmName}
                   onChange={(e) => setForm({ ...form, firmName: e.target.value })}
                 />
-                {errors.firmName && (
-                  <span className="text-error block text-[12px]">{errors.firmName}</span>
-                )}
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <span className="text-body-md text-on-surface-variant">Contact Person</span>
-                  <input
-                    className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
-                    type="text"
+                <FormField label="Contact Person">
+                  <TextInput
                     placeholder="e.g. Rajesh Mehra"
                     value={form.contactPerson}
                     onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <span className="text-body-md text-on-surface-variant">Phone</span>
-                  <input
-                    className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
-                    type="text"
+                </FormField>
+                <FormField label="Phone">
+                  <TextInput
                     placeholder="+91 98765 43210"
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   />
-                </div>
+                </FormField>
               </div>
-              <div className="space-y-1.5">
-                <span className="text-body-md text-on-surface-variant">Email</span>
-                <input
-                  className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
+              <FormField label="Email" error={errors.email}>
+                <TextInput
                   type="email"
                   placeholder="accounts@company.com"
                   value={form.email}
+                  invalid={!!errors.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
-                {errors.email && (
-                  <span className="text-error block text-[12px]">{errors.email}</span>
-                )}
-              </div>
+              </FormField>
             </div>
 
             <div className="space-y-4">
-              <label className="font-label-caps text-label-caps text-on-surface-variant block uppercase">
-                Location &amp; Tax
-              </label>
-              <div className="space-y-1.5">
-                <span className="text-body-md text-on-surface-variant">Address</span>
-                <input
-                  className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
-                  type="text"
+              <FieldLabel className="tracking-widest uppercase">Location &amp; Tax</FieldLabel>
+              <FormField label="Address">
+                <TextInput
                   placeholder="Plot 42, GIDC"
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                 />
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <span className="text-body-md text-on-surface-variant">City</span>
-                  <input
-                    className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
-                    type="text"
+                <FormField label="City">
+                  <TextInput
                     placeholder="Ahmedabad"
                     value={form.city}
                     onChange={(e) => setForm({ ...form, city: e.target.value })}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <span className="text-body-md text-on-surface-variant">State *</span>
-                  <input
-                    className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 focus:ring-0"
-                    type="text"
+                </FormField>
+                <FormField label="State" required error={errors.state}>
+                  <TextInput
                     placeholder="Gujarat"
                     value={form.state}
+                    invalid={!!errors.state}
                     onChange={(e) => setForm({ ...form, state: e.target.value })}
                   />
-                  {errors.state && (
-                    <span className="text-error block text-[12px]">{errors.state}</span>
-                  )}
-                </div>
+                </FormField>
               </div>
-              <div className="space-y-1.5">
-                <span className="text-body-md text-on-surface-variant">GSTIN</span>
-                <input
-                  className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] px-3 py-2 font-mono uppercase focus:ring-0"
-                  type="text"
+              <FormField label="GSTIN" error={errors.gstin}>
+                <TextInput
+                  className="font-mono uppercase"
                   placeholder="24AAAAA0000A1Z5"
                   value={form.gstin}
+                  invalid={!!errors.gstin}
                   onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
                 />
-                {errors.gstin && (
-                  <span className="text-error block text-[12px]">{errors.gstin}</span>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <span className="text-body-md text-on-surface-variant">Credit Limit</span>
+              </FormField>
+              <FormField label="Credit Limit" error={errors.creditLimit}>
                 <div className="relative">
                   <span className="text-on-surface-variant absolute top-1/2 left-3 -translate-y-1/2">
                     ₹
                   </span>
-                  <input
-                    className="bg-surface border-outline-variant text-on-surface focus:border-primary w-full rounded border-[0.5px] py-2 pr-3 pl-8 focus:ring-0"
+                  <TextInput
+                    className="pl-8"
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.creditLimit}
+                    invalid={!!errors.creditLimit}
                     onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
                   />
                 </div>
-                {errors.creditLimit && (
-                  <span className="text-error block text-[12px]">{errors.creditLimit}</span>
-                )}
-              </div>
+              </FormField>
             </div>
           </div>
 
