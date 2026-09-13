@@ -18,6 +18,11 @@ export type Status =
   // Payment
   | 'ACTIVE'
   | 'ON_ACCOUNT'
+  // Inquiry
+  | 'NEW'
+  | 'CONTACTED'
+  | 'CONVERTED'
+  | 'CLOSED'
   // Generic
   | 'DRAFT'
   | 'OVERDUE'
@@ -32,6 +37,10 @@ const STATUS_TONE: Record<Status, Tone> = {
   INVOICED: 'info',
   ACTIVE: 'success',
   ON_ACCOUNT: 'warning',
+  NEW: 'info',
+  CONTACTED: 'warning',
+  CONVERTED: 'success',
+  CLOSED: 'neutral',
   DRAFT: 'neutral',
   OVERDUE: 'error',
   CANCELLED: 'error',
