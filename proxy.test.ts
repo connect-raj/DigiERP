@@ -112,4 +112,32 @@ describe('proxy (auth + redirects)', () => {
     const res = await proxy(req);
     expect(res.status).toBe(200);
   });
+
+  it('passes through /api/public/* routes without a session token', async () => {
+    const req = new NextRequest('https://app.test/api/public/inquiries', {
+      method: 'POST',
+      headers: { 'x-api-key': 'some-key', 'Content-Type': 'application/json' },
+    });
+    const res = await proxy(req);
+    expect(res.status).toBe(200);
+  });
+
+  it('rate-limits /api/public/* routes', async () => {
+    for (let i = 0; i < 101; i++) {
+      const req = new NextRequest('https://app.test/api/public/inquiries', {
+        method: 'POST',
+        headers: { 'x-forwarded-for': '10.0.0.99' },
+      });
+      const res = await proxy(req);
+      if (i === 100) {
+        expect(res.status).toBe(429);
+      }
+    }
+  });
+});
+
+describe('proxy matcher — public routes', () => {
+  it('matches /api/public/* so rate limiting and the proxy still run', () => {
+    expect(unstable_doesMiddlewareMatch({ config, url: '/api/public/inquiries' })).toBe(true);
+  });
 });
