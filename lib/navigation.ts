@@ -31,6 +31,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales',
     items: [
+      { label: 'Inquiries', href: '/inquiries', icon: 'contact_mail' },
       { label: 'Customers', href: '/customers', icon: 'groups' },
       { label: 'Dispatch Entries', href: '/dispatch-entries', icon: 'local_shipping' },
       { label: 'Invoices', href: '/invoices', icon: 'receipt_long' },
