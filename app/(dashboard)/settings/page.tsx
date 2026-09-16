@@ -194,6 +194,22 @@ export default function SettingsPage() {
           </div>
         </form>
       )}
+
+      <div className="mt-6 max-w-2xl rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6">
+        <h2 className="font-display text-lg font-semibold tracking-tight">
+          Inquiry Ingestion Keys
+        </h2>
+        <p className="text-on-surface-variant mt-1 text-[13px]">
+          Per-source API keys for the public lead-intake endpoint (website form, expo microsite,
+          marketplace listings).
+        </p>
+        <a
+          href="/settings/ingestion-keys"
+          className="text-primary mt-4 inline-block rounded-lg border-[0.5px] border-[#444] bg-[#2a2a2a] px-5 py-2 text-[13px] font-medium transition-all hover:bg-[#333]"
+        >
+          Manage Ingestion Keys
+        </a>
+      </div>
     </div>
   );
 }

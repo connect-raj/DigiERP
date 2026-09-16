@@ -34,6 +34,33 @@ enum RecordStatus {
   VOID
 }
 
+enum InquirySource {
+  WEBSITE
+  EXPO
+  INDIAMART
+  TRADEINDIA
+  MANUAL
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  CLOSED
+}
+
+enum InquiryInterest {
+  INK
+  LARGE_FORMAT_PRINTER
+  NOT_SURE
+}
+
+enum InkType {
+  UV
+  SOLVENT
+  ECO_SOLVENT
+}
+
 model User {
   id                String             @id @default(uuid())
   username          String             @unique
@@ -186,11 +213,12 @@ model Customer {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  customerPrices  CustomerPrice[]
-  priceHistories  PriceHistory[]
-  dispatchEntries DispatchEntry[]
-  invoices        Invoice[]
-  payments        Payment[]
+  customerPrices     CustomerPrice[]
+  priceHistories     PriceHistory[]
+  dispatchEntries    DispatchEntry[]
+  invoices           Invoice[]
+  payments           Payment[]
+  convertedInquiries Inquiry[]
 }
 
 model DispatchEntry {
@@ -399,4 +427,39 @@ enum PaymentMode {
   CHEQUE
   UPI
   OTHER
+}
+
+model Inquiry {
+  id               String          @id @default(uuid())
+  source           InquirySource
+  status           InquiryStatus   @default(NEW)
+  company          String
+  contactName      String
+  phone            String
+  email            String?
+  city             String?
+  interestCategory InquiryInterest
+  inkType          InkType?
+  volume           String?
+  printerBrand     String?
+  currentSupplier  String?
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  convertedCustomerId String?
+  convertedCustomer   Customer? @relation(fields: [convertedCustomerId], references: [id])
+
+  @@index([status])
+  @@index([source])
+  @@index([phone])
+}
+
+model IngestionApiKey {
+  id        String        @id @default(uuid())
+  label     String
+  source    InquirySource
+  keyHash   String        @unique
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
 }

@@ -28,6 +28,19 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public ingestion routes use API-key auth (not session cookies), so they
+  // must skip the session-token check below. Rate limiting still applies.
+  if (pathname.startsWith('/api/public/')) {
+    const rl = rateLimit(clientKeyFromHeaders(request.headers));
+    if (!rl.allowed) {
+      const retryAfter = Math.max(0, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      return jsonError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, {
+        'Retry-After': String(retryAfter),
+      });
+    }
+    return NextResponse.next();
+  }
+
   // Rate limiting applies to API calls only — page navigations shouldn't
   // consume the same budget.
   if (isApi) {
