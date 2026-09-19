@@ -59,9 +59,20 @@ export interface InvoiceSnapshot {
   totals: InvoiceSnapshotTotals;
 }
 
+// Invoices print on pre-printed letterhead stock: the top ~5cm carries the
+// letterhead logo/heading and the bottom ~3.5cm carries the printed footer
+// strip, so content must stay clear of both.
+const CM_TO_PT = 28.3465;
+const PAGE_PADDING_TOP = 5 * CM_TO_PT;
+const PAGE_PADDING_BOTTOM = 3.5 * CM_TO_PT;
+const PAGE_PADDING_HORIZONTAL = 32;
+
 const styles = StyleSheet.create({
   page: {
-    padding: 32,
+    paddingTop: PAGE_PADDING_TOP,
+    paddingBottom: PAGE_PADDING_BOTTOM,
+    paddingLeft: PAGE_PADDING_HORIZONTAL,
+    paddingRight: PAGE_PADDING_HORIZONTAL,
     fontSize: 9,
     fontFamily: 'Helvetica',
     color: '#1a1a1a',
