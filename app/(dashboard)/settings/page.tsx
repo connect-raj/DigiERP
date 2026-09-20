@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type Settings = {
   companyName: string;
@@ -59,6 +60,7 @@ export default function SettingsPage() {
         }
       } catch (error) {
         console.error('Failed to fetch settings', error);
+        showErrorToast(error, 'Failed to load settings');
       } finally {
         setLoading(false);
       }
@@ -90,8 +92,10 @@ export default function SettingsPage() {
         throw new Error(data.error?.message ?? 'Failed to save settings');
       }
       setSuccessMessage('Company settings saved.');
+      showSuccessToast('Settings saved');
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Failed to save settings');
+      showErrorToast(error, 'Failed to save settings');
     } finally {
       setIsSubmitting(false);
     }
