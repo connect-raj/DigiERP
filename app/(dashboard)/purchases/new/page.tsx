@@ -33,8 +33,13 @@ type Product = {
   id: string;
   name: string;
   basePrice: string | number;
-  category: { gstRate: string | number };
+  taxClass: { gstRate: string | number } | null;
+  line: { taxClass: { gstRate: string | number } };
 };
+
+function getEffectiveGstRate(product: Product): number {
+  return Number(product.taxClass?.gstRate ?? product.line.taxClass.gstRate);
+}
 
 const COMPANY_STATE = 'Gujarat';
 
@@ -88,7 +93,7 @@ export default function NewPurchasePage() {
         sub += itemSubtotal;
 
         if (product) {
-          const gstRate = Number(product.category.gstRate);
+          const gstRate = getEffectiveGstRate(product);
           tax += (itemSubtotal * gstRate) / 100;
         }
       }
@@ -314,7 +319,7 @@ export default function NewPurchasePage() {
                 {fields.map((field, index) => {
                   const item = watchItems[index];
                   const product = products.find((p) => p.id === item?.productId);
-                  const taxPercent = product ? Number(product.category.gstRate) : 0;
+                  const taxPercent = product ? getEffectiveGstRate(product) : 0;
                   const lineBaseTotal = (item?.quantity || 0) * (item?.unitPrice || 0);
                   const lineTax = (lineBaseTotal * taxPercent) / 100;
                   const lineTotal = lineBaseTotal + lineTax;

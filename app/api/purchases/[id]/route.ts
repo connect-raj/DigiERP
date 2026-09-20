@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { asyncHandler } from '@/lib/asyncHandler';
 import { successResponse, NotFoundError, BadRequestError } from '@/lib/errors';
+import { getEffectiveTaxClass } from '@/lib/tax-class';
 
 export const GET = asyncHandler(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -14,7 +15,13 @@ export const GET = asyncHandler(
         items: {
           include: {
             product: {
-              select: { name: true, unit: true, category: { select: { hsnCode: true, gstRate: true } } },
+              select: {
+                name: true,
+                unit: true,
+                taxClassId: true,
+                taxClass: true,
+                line: { select: { taxClass: true } },
+              },
             },
           },
         },
@@ -40,10 +47,29 @@ export const GET = asyncHandler(
       createdAt: txn.createdAt,
     }));
 
+    const formattedItems = purchase.items.map((item) => {
+      const effectiveTaxClass = getEffectiveTaxClass(item.product);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { taxClassId, taxClass: _taxClass, line: _line, ...restProduct } = item.product;
+      return {
+        ...item,
+        product: {
+          ...restProduct,
+          taxClass: {
+            name: effectiveTaxClass.name,
+            hsnCode: effectiveTaxClass.hsnCode,
+            gstRate: effectiveTaxClass.gstRate,
+            isOverride: taxClassId !== null,
+          },
+        },
+      };
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { stockTxns: _, ...restPurchase } = purchase;
+    const { stockTxns: _, items: _items, ...restPurchase } = purchase;
     const response = {
       ...restPurchase,
+      items: formattedItems,
       stockTransactions: formattedStockTxns,
     };
 

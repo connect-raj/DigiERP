@@ -41,9 +41,11 @@ type Purchase = {
     product: {
       name: string;
       unit: string;
-      category: {
+      taxClass: {
+        name: string;
         gstRate: string | number;
-        hsnCode?: string;
+        hsnCode: string | null;
+        isOverride: boolean;
       };
     };
   }[];
@@ -259,8 +261,11 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                         <td className="px-5 py-4">
                           <p className="text-on-surface font-medium">{item.product.name}</p>
                           <p className="text-on-surface-variant mt-0.5 text-[12px]">
-                            HSN: {item.product.category.hsnCode || 'N/A'} | GST:{' '}
-                            {item.product.category.gstRate}%
+                            HSN: {item.product.taxClass.hsnCode || 'N/A'} | GST:{' '}
+                            {item.product.taxClass.gstRate}%{' '}
+                            <span className="text-on-surface-variant">
+                              ({item.product.taxClass.isOverride ? 'override' : 'from line'})
+                            </span>
                           </p>
                         </td>
                         <td className="px-5 py-4 text-right">

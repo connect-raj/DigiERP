@@ -37,9 +37,10 @@ const productDetailInclude = {
 };
 
 const productListInclude = {
-  line: { select: { id: true, name: true, kind: true } },
+  line: { select: { id: true, name: true, kind: true, taxClass: true } },
   unit: { select: { id: true, name: true } },
   colour: { select: { id: true, name: true } },
+  taxClass: true,
 };
 
 export class ProductRepository {
