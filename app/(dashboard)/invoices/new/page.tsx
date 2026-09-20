@@ -45,7 +45,13 @@ type InvoicePreview = {
 
 function computePrintedName(item: InvoicePreviewItem, editedBaseName: string) {
   if (item.lineKind === 'INK') {
-    return `${editedBaseName} – ${item.colourName ?? ''} – ${item.packSize ?? ''} ${item.unitName}`;
+    return [
+      editedBaseName,
+      item.colourName,
+      item.packSize != null ? `${item.packSize} ${item.unitName}` : null,
+    ]
+      .filter((part): part is string => part != null && part !== '')
+      .join(' – ');
   }
   return editedBaseName;
 }

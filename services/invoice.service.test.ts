@@ -303,6 +303,35 @@ describe('InvoiceService', () => {
       );
     });
 
+    it('INK: omits the colour segment (no stray dash) for a colourless line, e.g. Flush', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue({
+        ...baseDispatchEntry,
+        items: [
+          {
+            ...baseDispatchEntry.items[0],
+            customerLineInvoiceName: null,
+            product: {
+              ...baseDispatchEntry.items[0].product,
+              colour: null,
+              line: {
+                ...baseDispatchEntry.items[0].product.line,
+                name: 'Solvent Flush',
+                invoiceName: null,
+              },
+            },
+          },
+        ],
+      } as never);
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe('Solvent Flush – 1 LTR');
+    });
+
     function nonInkDispatchEntry(
       kind: 'MACHINE' | 'SPARE_PART',
       overrides: { customerLineInvoiceName?: string | null; lineInvoiceName?: string | null }

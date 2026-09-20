@@ -46,7 +46,9 @@ function resolveInvoiceItem(item: DispatchItemForInvoicing, override?: ItemOverr
 
   const printedName =
     line.kind === ProductKind.INK
-      ? `${baseName} – ${colourName ?? ''} – ${packSize ?? ''} ${unitName}`
+      ? [baseName, colourName, packSize != null ? `${packSize} ${unitName}` : null]
+          .filter((part): part is string => part != null && part !== '')
+          .join(' – ')
       : baseName;
 
   return {
