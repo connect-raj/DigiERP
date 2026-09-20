@@ -2,10 +2,10 @@
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { TooltipContentProps } from 'recharts';
-import type { TopCategoryPoint } from '../../_lib/dashboard-types';
+import type { TopLinePoint } from '../../_lib/dashboard-types';
 
-interface TopCategoryChartProps {
-  data: TopCategoryPoint[];
+interface TopProductLineChartProps {
+  data: TopLinePoint[];
 }
 
 const BAR_COLOR = '#adc6ff';
@@ -27,7 +27,7 @@ function formatCompactInr(value: number) {
   }).format(value);
 }
 
-function CategoryTooltip({ active, payload, label }: TooltipContentProps) {
+function ProductLineTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload || payload.length === 0) return null;
   const value = payload[0]?.value;
   if (typeof value !== 'number') return null;
@@ -43,14 +43,14 @@ function CategoryTooltip({ active, payload, label }: TooltipContentProps) {
   );
 }
 
-export default function TopCategoryChart({ data }: TopCategoryChartProps) {
+export default function TopProductLineChart({ data }: TopProductLineChartProps) {
   if (data.length === 0) {
     return (
       <div className="flex h-[260px] flex-col items-center justify-center gap-2">
         <span className="material-symbols-outlined text-on-surface-variant text-[32px]">
           bar_chart
         </span>
-        <p className="text-body-md text-on-surface-variant">No category sales in this period.</p>
+        <p className="text-body-md text-on-surface-variant">No product line sales in this period.</p>
       </div>
     );
   }
@@ -73,13 +73,13 @@ export default function TopCategoryChart({ data }: TopCategoryChartProps) {
         />
         <YAxis
           type="category"
-          dataKey="categoryName"
+          dataKey="lineName"
           tick={{ fill: AXIS_COLOR, fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           width={100}
         />
-        <Tooltip content={CategoryTooltip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+        <Tooltip content={ProductLineTooltip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
         <Bar dataKey="amount" fill={BAR_COLOR} radius={[0, 4, 4, 0]} maxBarSize={20} />
       </BarChart>
     </ResponsiveContainer>

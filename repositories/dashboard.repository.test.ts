@@ -76,15 +76,15 @@ describe('DashboardRepository', () => {
     ]);
   });
 
-  it('findTopCategorySalesInRange groups invoice items by product, via the parent invoice date', async () => {
+  it('findTopProductLineSalesInRange groups invoice items by product, via the parent invoice date', async () => {
     vi.mocked(prisma.invoiceItem.groupBy).mockResolvedValue([
       { productId: 'p1', _sum: { lineTotal: 250 } },
     ] as never);
     vi.mocked(prisma.product.findMany).mockResolvedValue([
-      { id: 'p1', category: { id: 'c1', name: 'Category One' } },
+      { id: 'p1', line: { id: 'l1', name: 'Line One' } },
     ] as never);
 
-    const result = await dashboardRepository.findTopCategorySalesInRange(range);
+    const result = await dashboardRepository.findTopProductLineSalesInRange(range);
 
     expect(prisma.invoiceItem.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -93,7 +93,7 @@ describe('DashboardRepository', () => {
         _sum: { lineTotal: true },
       })
     );
-    expect(result).toEqual([{ categoryId: 'c1', categoryName: 'Category One', amount: 250 }]);
+    expect(result).toEqual([{ lineId: 'l1', lineName: 'Line One', amount: 250 }]);
   });
 
   it('sumOnAccountCredit = ACTIVE payments − invoice-directed ACTIVE allocations, floored at 0', async () => {
@@ -131,14 +131,14 @@ describe('DashboardRepository', () => {
     );
   });
 
-  it('findActiveProducts only returns active products and includes category', async () => {
+  it('findActiveProducts only returns active products and includes line', async () => {
     vi.mocked(prisma.product.findMany).mockResolvedValue([]);
     await dashboardRepository.findActiveProducts();
     expect(prisma.product.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { isActive: true },
         select: expect.objectContaining({
-          category: { select: { id: true, name: true } },
+          line: { select: { id: true, name: true } },
         }),
       })
     );

@@ -16,7 +16,7 @@ type VendorProduct = {
     id: string;
     name: string;
     unit: string;
-    category: { name: string } | null;
+    line: { id: string; name: string } | null;
   };
 };
 
@@ -262,7 +262,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                 <thead>
                   <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
                     <th className="px-5 py-3">Product</th>
-                    <th className="px-5 py-3">Category</th>
+                    <th className="px-5 py-3">Product Line</th>
                     <th className="px-5 py-3">Preferred</th>
                     <th className="px-5 py-3"></th>
                   </tr>
@@ -272,7 +272,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                     <tr key={vp.id} className="hover:bg-surface-container transition-colors">
                       <td className="text-on-surface px-5 py-3 font-medium">{vp.product.name}</td>
                       <td className="text-on-surface-variant px-5 py-3 text-[13px]">
-                        {vp.product.category?.name || '—'}
+                        {vp.product.line?.name || '—'}
                       </td>
                       <td className="px-5 py-3">
                         {vp.isPreferred ? (

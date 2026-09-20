@@ -8,7 +8,7 @@ vi.mock('@/repositories/dashboard.repository', () => ({
     findInvoicesInRange: vi.fn(),
     sumPaymentsInRange: vi.fn(),
     findVendorPayables: vi.fn(),
-    findTopCategorySalesInRange: vi.fn(),
+    findTopProductLineSalesInRange: vi.fn(),
     findActiveProducts: vi.fn(),
     findAllCustomers: vi.fn(),
     sumOnAccountCredit: vi.fn(),
@@ -24,7 +24,7 @@ function mockEmptyRepo() {
   vi.spyOn(dashboardRepository, 'findInvoicesInRange').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'sumPaymentsInRange').mockResolvedValue(0);
   vi.spyOn(dashboardRepository, 'findVendorPayables').mockResolvedValue([] as never);
-  vi.spyOn(dashboardRepository, 'findTopCategorySalesInRange').mockResolvedValue([] as never);
+  vi.spyOn(dashboardRepository, 'findTopProductLineSalesInRange').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findActiveProducts').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'findAllCustomers').mockResolvedValue([] as never);
   vi.spyOn(dashboardRepository, 'sumOnAccountCredit').mockResolvedValue(0);
@@ -247,25 +247,25 @@ describe('DashboardService', () => {
     });
   });
 
-  describe('topCategoryChart', () => {
-    it('groups by category, sorts descending, and caps at 5', async () => {
+  describe('topLineChart', () => {
+    it('groups by product line, sorts descending, and caps at 5', async () => {
       vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
       mockEmptyRepo();
       const items = Array.from({ length: 6 }, (_, i) => ({
-        categoryId: `cat-${i}`,
-        categoryName: `Category ${i}`,
+        lineId: `line-${i}`,
+        lineName: `Line ${i}`,
         amount: (i + 1) * 100,
       })).reverse();
-      vi.spyOn(dashboardRepository, 'findTopCategorySalesInRange').mockResolvedValue(
+      vi.spyOn(dashboardRepository, 'findTopProductLineSalesInRange').mockResolvedValue(
         items as never
       );
 
       const result = await dashboardService.getDashboard('month');
 
-      expect(result.topCategoryChart).toHaveLength(5);
-      expect(result.topCategoryChart[0]).toEqual({
-        categoryId: 'cat-5',
-        categoryName: 'Category 5',
+      expect(result.topLineChart).toHaveLength(5);
+      expect(result.topLineChart[0]).toEqual({
+        lineId: 'line-5',
+        lineName: 'Line 5',
         amount: 600,
       });
     });
@@ -275,22 +275,22 @@ describe('DashboardService', () => {
     it('flags products at or below their lower stock limit', async () => {
       vi.spyOn(dashboardRepository, 'findSettings').mockResolvedValue(null);
       mockEmptyRepo();
-      const inkCategory = { id: 'cat-ink', name: 'Ink' };
+      const inkLine = { id: 'line-ink', name: 'Ink' };
       vi.spyOn(dashboardRepository, 'findActiveProducts').mockResolvedValue([
-        { id: 'p1', name: 'Ink Red', currentStock: 5, lowerStockLimit: 10, category: inkCategory },
+        { id: 'p1', name: 'Ink Red', currentStock: 5, lowerStockLimit: 10, line: inkLine },
         {
           id: 'p2',
           name: 'Ink Blue',
           currentStock: 20,
           lowerStockLimit: 10,
-          category: inkCategory,
+          line: inkLine,
         },
         {
           id: 'p3',
           name: 'Ink Black',
           currentStock: 10,
           lowerStockLimit: 10,
-          category: inkCategory,
+          line: inkLine,
         },
       ] as never);
 
@@ -302,16 +302,16 @@ describe('DashboardService', () => {
           productName: 'Ink Red',
           currentStock: 5,
           lowerStockLimit: 10,
-          categoryId: 'cat-ink',
-          categoryName: 'Ink',
+          lineId: 'line-ink',
+          lineName: 'Ink',
         },
         {
           productId: 'p3',
           productName: 'Ink Black',
           currentStock: 10,
           lowerStockLimit: 10,
-          categoryId: 'cat-ink',
-          categoryName: 'Ink',
+          lineId: 'line-ink',
+          lineName: 'Ink',
         },
       ]);
     });
@@ -391,7 +391,7 @@ describe('DashboardService', () => {
 
       expect(result.vendorPayables.topPendingVendors).toEqual([]);
       expect(result.salesChart).toEqual([]);
-      expect(result.topCategoryChart).toEqual([]);
+      expect(result.topLineChart).toEqual([]);
       expect(result.lowStock).toEqual([]);
       expect(result.creditHealth.breachedCustomers).toEqual([]);
       expect(result.recentActivity).toEqual([]);

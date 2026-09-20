@@ -3,7 +3,7 @@ import { getPeriodRange, getIstDateParts, Period } from '@/lib/period';
 import { getInvoiceBalance, round2 } from '@/lib/balance';
 
 const TOP_PENDING_VENDORS_LIMIT = 5;
-const TOP_CATEGORY_LIMIT = 5;
+const TOP_LINE_LIMIT = 5;
 const RECENT_ACTIVITY_LIMIT = 15;
 
 type InvoiceRow = Awaited<ReturnType<typeof dashboardRepository.findInvoicesInRange>>[number];
@@ -50,7 +50,7 @@ export class DashboardService {
       previousInvoices,
       previousCollected,
       vendorPayables,
-      topCategorySales,
+      topLineSales,
       products,
       customers,
       onAccountCredit,
@@ -62,7 +62,7 @@ export class DashboardService {
       dashboardRepository.findInvoicesInRange(previousRange),
       dashboardRepository.sumPaymentsInRange(previousRange),
       dashboardRepository.findVendorPayables(),
-      dashboardRepository.findTopCategorySalesInRange(range),
+      dashboardRepository.findTopProductLineSalesInRange(range),
       dashboardRepository.findActiveProducts(),
       dashboardRepository.findAllCustomers(),
       dashboardRepository.sumOnAccountCredit(),
@@ -78,7 +78,7 @@ export class DashboardService {
       onAccountCredit,
       receivablesAging: this.buildAging(openInvoices, now),
       salesChart: this.buildSalesChart(period, invoices),
-      topCategoryChart: topCategorySales.slice(0, TOP_CATEGORY_LIMIT),
+      topLineChart: topLineSales.slice(0, TOP_LINE_LIMIT),
       lowStock: this.buildLowStock(products),
       creditHealth: this.buildCreditHealth(customers),
       recentActivity,
@@ -188,8 +188,8 @@ export class DashboardService {
         productName: product.name,
         currentStock: Number(product.currentStock),
         lowerStockLimit: Number(product.lowerStockLimit),
-        categoryId: product.category.id,
-        categoryName: product.category.name,
+        lineId: product.line.id,
+        lineName: product.line.name,
       }));
   }
 
