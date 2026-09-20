@@ -53,7 +53,9 @@ const baseCreateData: CreateInvoiceData = {
     {
       productId: 'prod-1',
       productName: 'Ink Red',
-      categoryName: 'Ink',
+      lineId: 'line-1',
+      lineName: 'Ink',
+      printedName: 'Ink Red',
       hsnCode: '3215',
       unit: 'LTR',
       quantity: 10,

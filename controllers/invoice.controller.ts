@@ -52,6 +52,16 @@ export class InvoiceController {
     return successResponse(response);
   }
 
+  async getPreview(req: NextRequest) {
+    const { searchParams } = new URL(req.url);
+    const dispatchEntryId = searchParams.get('dispatchEntryId');
+    if (!dispatchEntryId) {
+      throw new BadRequestError('dispatchEntryId is required');
+    }
+    const preview = await invoiceService.getInvoicingPreview(dispatchEntryId);
+    return successResponse(preview);
+  }
+
   async create(req: NextRequest) {
     let body: unknown;
     try {

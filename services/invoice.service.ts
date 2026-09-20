@@ -1,4 +1,4 @@
-import { DocStatus } from '@prisma/client';
+import { DocStatus, ProductKind } from '@prisma/client';
 import {
   invoiceRepository,
   InvoiceFilters,
@@ -7,7 +7,66 @@ import {
 import { customerRepository } from '@/repositories/customer.repository';
 import { NotFoundError, BadRequestError, AppError } from '@/lib/errors';
 import { determineGstType } from '@/lib/gst';
+import { getEffectiveTaxClass, assertHasHsnCode } from '@/lib/tax-class';
 import { CreateInvoiceInput } from '@/validations/invoice';
+
+/** A dispatch entry item as returned by invoiceRepository.findDispatchEntryForInvoicing. */
+type DispatchItemForInvoicing = NonNullable<
+  Awaited<ReturnType<typeof invoiceRepository.findDispatchEntryForInvoicing>>
+>['items'][number];
+
+interface ItemOverride {
+  printedNameOverride?: string;
+  rememberForCustomer?: boolean;
+}
+
+/**
+ * Resolves the display/printed name, effective tax class, and price-zero flag for a
+ * dispatch entry item — shared by both invoice creation and the invoicing preview so
+ * the two never drift apart.
+ */
+function resolveInvoiceItem(item: DispatchItemForInvoicing, override?: ItemOverride) {
+  const price = Number(item.price);
+  const quantity = Number(item.quantity);
+  const line = item.product.line;
+  const effectiveTaxClass = getEffectiveTaxClass(item.product);
+
+  // Editable tier: request override (this invoice only) -> remembered customer override ->
+  // line's own invoice name -> real name. The colour/pack suffix for INK is auto-appended,
+  // never part of the editable base name.
+  const overrideName = override?.printedNameOverride ?? item.customerLineInvoiceName ?? undefined;
+  const baseName =
+    line.kind === ProductKind.INK
+      ? (overrideName ?? line.invoiceName ?? line.name)
+      : (overrideName ?? line.invoiceName ?? item.product.name);
+
+  const colourName = item.product.colour?.name ?? null;
+  const packSize = item.product.packSize != null ? Number(item.product.packSize) : null;
+  const unitName = item.product.unit.name;
+
+  const printedName =
+    line.kind === ProductKind.INK
+      ? `${baseName} – ${colourName ?? ''} – ${packSize ?? ''} ${unitName}`
+      : baseName;
+
+  return {
+    productId: item.productId,
+    productName: item.product.name,
+    lineId: line.id,
+    lineKind: line.kind,
+    lineName: line.name,
+    baseName,
+    printedName,
+    colourName,
+    packSize,
+    unitName,
+    quantity,
+    price,
+    priceIsZero: price === 0,
+    effectiveTaxClass,
+    taxClassMissingHsn: !effectiveTaxClass.hsnCode || effectiveTaxClass.hsnCode.trim() === '',
+  };
+}
 
 export class InvoiceService {
   async getAll(filters: InvoiceFilters) {
@@ -83,16 +142,29 @@ export class InvoiceService {
 
     const gstType = determineGstType(settings.companyState, dispatchEntry.customer.state);
 
+    const overridesByProductId = new Map(
+      (data.items ?? []).map((it) => [it.productId, it] as const)
+    );
+
     let totalAmount = 0;
     let totalCgst = 0;
     let totalSgst = 0;
     let totalIgst = 0;
 
     const items: CreateInvoiceItemInput[] = dispatchEntry.items.map((item) => {
-      const price = Number(item.price);
-      const quantity = Number(item.quantity);
-      const gstRate = Number(item.product.category.gstRate);
-      const baseTotal = price * quantity;
+      const override = overridesByProductId.get(item.productId);
+      const resolved = resolveInvoiceItem(item, override);
+
+      if (resolved.priceIsZero) {
+        throw new BadRequestError(
+          `Price not set for '${resolved.productName}' — set a customer price or product base price before invoicing.`,
+          'PRICE_NOT_SET'
+        );
+      }
+      assertHasHsnCode(resolved.effectiveTaxClass, resolved.productName);
+
+      const gstRate = Number(resolved.effectiveTaxClass.gstRate);
+      const baseTotal = resolved.price * resolved.quantity;
 
       let cgst = 0;
       let sgst = 0;
@@ -111,17 +183,21 @@ export class InvoiceService {
       totalIgst += igst;
 
       return {
-        productId: item.productId,
-        productName: item.product.name,
-        categoryName: item.product.category.name,
-        hsnCode: item.product.category.hsnCode,
-        unit: item.product.unit,
-        quantity,
-        price,
+        productId: resolved.productId,
+        productName: resolved.productName,
+        lineId: resolved.lineId,
+        lineName: resolved.lineName,
+        printedName: resolved.printedName,
+        hsnCode: resolved.effectiveTaxClass.hsnCode!,
+        unit: resolved.unitName,
+        quantity: resolved.quantity,
+        price: resolved.price,
         cgst,
         sgst,
         igst,
         lineTotal,
+        printedNameOverride: override?.printedNameOverride,
+        rememberForCustomer: override?.rememberForCustomer,
       };
     });
 
@@ -159,6 +235,47 @@ export class InvoiceService {
     });
 
     return invoice;
+  }
+
+  /**
+   * Read-only preview of how a dispatch entry's items would resolve at invoicing time —
+   * printed names, price-zero and missing-HSN flags — so the invoice screen can surface
+   * problems (and let the user edit the printed name) before submitting.
+   */
+  async getInvoicingPreview(dispatchEntryId: string) {
+    const dispatchEntry = await invoiceRepository.findDispatchEntryForInvoicing(dispatchEntryId);
+    if (!dispatchEntry) {
+      throw new NotFoundError(
+        `Dispatch entry with id '${dispatchEntryId}' not found`,
+        'DISPATCH_ENTRY_NOT_FOUND'
+      );
+    }
+
+    const items = dispatchEntry.items.map((item) => {
+      const resolved = resolveInvoiceItem(item);
+      return {
+        productId: resolved.productId,
+        productName: resolved.productName,
+        lineId: resolved.lineId,
+        lineKind: resolved.lineKind,
+        lineName: resolved.lineName,
+        baseName: resolved.baseName,
+        printedName: resolved.printedName,
+        colourName: resolved.colourName,
+        packSize: resolved.packSize,
+        unitName: resolved.unitName,
+        quantity: resolved.quantity,
+        price: resolved.price,
+        priceIsZero: resolved.priceIsZero,
+        taxClassMissingHsn: resolved.taxClassMissingHsn,
+      };
+    });
+
+    return {
+      dispatchEntryId: dispatchEntry.id,
+      customerId: dispatchEntry.customerId,
+      items,
+    };
   }
 
   async setOpeningBalance(customerId: string, totalAmount: number, asOfDate: string) {
