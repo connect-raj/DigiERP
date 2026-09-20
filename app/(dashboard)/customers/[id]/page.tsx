@@ -21,7 +21,7 @@ type CustomerPrice = {
   updatedAt: string;
   product: {
     name: string;
-    unit: string;
+    unit: { name: string };
   };
 };
 
@@ -33,7 +33,7 @@ type PriceHistoryRow = {
   recordedAt: string;
   product: {
     name: string;
-    unit: string;
+    unit: { name: string };
   };
 };
 
@@ -594,7 +594,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             />
                           ) : (
                             <>
-                              {formatINR(cp.price)} / {cp.product.unit}
+                              {formatINR(cp.price)} / {cp.product.unit.name}
                             </>
                           )}
                         </td>
@@ -815,7 +815,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           {row.product.name}
                         </td>
                         <td className="text-on-surface px-5 py-3 text-right font-mono">
-                          {formatINR(row.price)} / {row.product.unit}
+                          {formatINR(row.price)} / {row.product.unit.name}
                         </td>
                         <td className="px-5 py-3">
                           <span

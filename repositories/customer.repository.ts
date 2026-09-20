@@ -135,7 +135,7 @@ export class CustomerRepository {
   async findPricesByCustomerId(customerId: string) {
     return prisma.customerPrice.findMany({
       where: { customerId },
-      include: { product: true },
+      include: { product: { include: { unit: true } } },
     });
   }
 

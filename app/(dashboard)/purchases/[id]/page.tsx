@@ -41,7 +41,7 @@ type Purchase = {
     lineTotal: string | number;
     product: {
       name: string;
-      unit: string;
+      unit: { name: string };
       taxClass: {
         name: string;
         gstRate: string | number;
@@ -283,7 +283,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                         </td>
                         <td className="px-5 py-4 text-right">
                           <span className="text-on-surface font-mono">
-                            {lQty} {item.product.unit}
+                            {lQty} {item.product.unit.name}
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right">

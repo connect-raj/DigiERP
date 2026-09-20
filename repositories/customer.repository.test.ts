@@ -159,12 +159,12 @@ describe('CustomerRepository', () => {
   });
 
   describe('findPricesByCustomerId', () => {
-    it('includes the product relation', async () => {
+    it('includes the product relation with its unit', async () => {
       vi.mocked(prisma.customerPrice.findMany).mockResolvedValue([]);
       await customerRepository.findPricesByCustomerId('cust-1');
       expect(prisma.customerPrice.findMany).toHaveBeenCalledWith({
         where: { customerId: 'cust-1' },
-        include: { product: true },
+        include: { product: { include: { unit: true } } },
       });
     });
   });
