@@ -7,7 +7,7 @@ import { parsePagination } from '@/lib/pagination';
 export class ProductController {
   async getAll(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const categoryId = searchParams.get('categoryId') ?? undefined;
+    const lineId = searchParams.get('lineId') ?? undefined;
     const search = searchParams.get('search') ?? undefined;
     const isActiveParam = searchParams.get('isActive');
 
@@ -16,7 +16,7 @@ export class ProductController {
 
     const { page, limit, skip, take } = parsePagination(searchParams);
     const { data, total } = await productService.getAll({
-      categoryId,
+      lineId,
       isActive,
       search,
       skip,

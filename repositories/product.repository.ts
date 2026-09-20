@@ -1,24 +1,63 @@
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
-import { CreateProductInput, UpdateProductInput } from '@/validations/product';
+
+export interface ProductWriteData {
+  lineId: string;
+  name: string;
+  unitId: string;
+  packSize?: number | null;
+  colourId?: string | null;
+  specs?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  taxClassId?: string | null;
+  basePrice?: number;
+  lowerStockLimit?: number;
+  isActive?: boolean;
+}
+
+// Include both the product's own (override) tax class and the line's tax
+// class, so callers can resolve the effective one (own if set, else the
+// line's) without a second query.
+const productDetailInclude = {
+  line: { include: { taxClass: true } },
+  unit: true,
+  colour: true,
+  taxClass: true,
+  vendorProducts: {
+    select: {
+      id: true,
+      isPreferred: true,
+      vendor: { select: { id: true, name: true } },
+    },
+  },
+  stockTxns: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 10,
+  },
+};
+
+const productListInclude = {
+  line: { select: { id: true, name: true, kind: true } },
+  unit: { select: { id: true, name: true } },
+  colour: { select: { id: true, name: true } },
+};
 
 export class ProductRepository {
   async findAll(params: {
-    categoryId?: string;
+    lineId?: string;
     isActive?: boolean;
     search?: string;
     skip?: number;
     take?: number;
   }) {
-    const { categoryId, isActive, search, skip, take } = params;
+    const { lineId, isActive, search, skip, take } = params;
     const where: Prisma.ProductWhereInput = {
-      ...(categoryId && { categoryId }),
+      ...(lineId && { lineId }),
       ...(isActive !== undefined && { isActive }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
-          { category: { name: { contains: search, mode: 'insensitive' } } },
+          { line: { name: { contains: search, mode: 'insensitive' } } },
         ],
       }),
     };
@@ -26,9 +65,7 @@ export class ProductRepository {
     const [data, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: {
-          category: { select: { name: true } },
-        },
+        include: productListInclude,
         orderBy: { createdAt: 'desc' },
         skip,
         take,
@@ -42,29 +79,16 @@ export class ProductRepository {
   async findById(id: string) {
     return prisma.product.findUnique({
       where: { id },
-      include: {
-        category: { select: { name: true } },
-        vendorProducts: {
-          select: {
-            id: true,
-            isPreferred: true,
-            vendor: { select: { id: true, name: true } },
-          },
-        },
-        stockTxns: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-      },
+      include: productDetailInclude,
     });
   }
 
-  async create(data: CreateProductInput) {
-    return prisma.product.create({ data });
+  async create(data: ProductWriteData) {
+    return prisma.product.create({ data, include: productDetailInclude });
   }
 
-  async update(id: string, data: UpdateProductInput) {
-    return prisma.product.update({ where: { id }, data });
+  async update(id: string, data: Partial<ProductWriteData>) {
+    return prisma.product.update({ where: { id }, data, include: productDetailInclude });
   }
 
   async softDelete(id: string) {

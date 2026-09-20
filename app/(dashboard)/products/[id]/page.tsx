@@ -22,16 +22,28 @@ type VendorLink = {
   vendor: { id: string; name: string };
 };
 
+type Kind = 'INK' | 'MACHINE' | 'SPARE_PART';
+
+const KIND_LABEL: Record<Kind, string> = {
+  INK: 'Ink',
+  MACHINE: 'Machine',
+  SPARE_PART: 'Spare Part',
+};
+
+type TaxClass = { id: string; name: string; gstRate: string | number };
+
 type Product = {
   id: string;
   name: string;
-  sku: string;
-  unit: string;
+  unit: { id: string; name: string };
+  packSize: string | number | null;
+  colour: { id: string; name: string } | null;
   basePrice: string | number;
   currentStock: string | number;
   lowerStockLimit: string | number;
   isActive: boolean;
-  category: { name: string } | null;
+  taxClass: TaxClass | null;
+  line: { id: string; name: string; kind: Kind; taxClass: TaxClass };
   vendorProducts: VendorLink[];
   stockTxns: StockTxn[];
 };
@@ -144,7 +156,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             {product.name}
           </h1>
           <p className="text-on-surface-variant mt-0.5 font-mono text-sm uppercase">
-            {product.sku} · {product.category?.name || 'Uncategorized'}
+            {product.line.name} · {KIND_LABEL[product.line.kind]}
           </p>
         </div>
       </div>
@@ -158,7 +170,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             >
               {currentStock}
             </span>
-            <span className="text-on-surface-variant text-[13px]">{product.unit}</span>
+            <span className="text-on-surface-variant text-[13px]">{product.unit.name}</span>
             {isLow && (
               <span className="bg-status-error/10 text-status-error ml-2 rounded px-2 py-0.5 text-[10px] font-bold uppercase">
                 Low (min {lowerLimit})
@@ -216,8 +228,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         <DetailCard title="Details">
           <dl className="flex flex-col gap-3 text-[13px]">
             {[
+              ['Product Line', product.line.name],
+              ['Kind', KIND_LABEL[product.line.kind]],
               ['Base Price', `₹ ${Number(product.basePrice).toFixed(2)}`],
-              ['Unit', product.unit],
+              ['Unit', product.unit.name],
+              ...(product.packSize !== null
+                ? [['Pack Size', `${product.packSize} ${product.unit.name}`]]
+                : []),
+              ...(product.colour ? [['Colour', product.colour.name]] : []),
+              [
+                'Tax class',
+                product.taxClass
+                  ? `${product.taxClass.name} (override)`
+                  : `${product.line.taxClass.name} (from line)`,
+              ],
               ['Low-stock limit', String(lowerLimit)],
               ['Status', product.isActive ? 'Active' : 'Inactive'],
             ].map(([label, value]) => (
