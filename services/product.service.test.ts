@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { productService } from './product.service';
 import { productRepository } from '@/repositories/product.repository';
-import { NotFoundError } from '@/lib/errors';
+import { productLineRepository } from '@/repositories/product-line.repository';
+import { unitRepository } from '@/repositories/unit.repository';
+import { NotFoundError, BadRequestError } from '@/lib/errors';
 import { Decimal } from '@prisma/client/runtime/library';
 
 vi.mock('@/repositories/product.repository', () => ({
@@ -17,23 +19,70 @@ vi.mock('@/repositories/product.repository', () => ({
   },
 }));
 
+vi.mock('@/repositories/product-line.repository', () => ({
+  productLineRepository: {
+    findById: vi.fn(),
+  },
+}));
+
+vi.mock('@/repositories/unit.repository', () => ({
+  unitRepository: {
+    findById: vi.fn(),
+  },
+}));
+
 const mockProduct = {
   id: 'prod-id-1',
-  name: 'Cyan 1Ltr',
-  categoryId: 'cat-id-1',
+  name: 'Premium UV Ink – Cyan – 1 LTR',
+  lineId: 'line-id-1',
+  unitId: 'unit-id-1',
+  packSize: new Decimal('1'),
+  colourId: 'colour-id-1',
+  taxClassId: null,
   basePrice: new Decimal('0.00'),
-  unit: 'LTR',
   currentStock: new Decimal('10.000'),
   lowerStockLimit: new Decimal('2.000'),
   isActive: true,
   createdAt: new Date(),
   updatedAt: new Date(),
-  category: { id: 'cat-id-1', name: 'Konica 512i Solvent Ink' },
+  line: { id: 'line-id-1', name: 'Premium UV Ink', kind: 'INK' },
+  unit: { id: 'unit-id-1', name: 'LTR' },
+  colour: { id: 'colour-id-1', name: 'Cyan' },
+  taxClass: null,
   vendorProducts: [],
   stockTxns: [],
 };
 
 const mockProductNoStock = { ...mockProduct, currentStock: new Decimal('0.000') };
+
+const inkLine = {
+  id: 'line-id-1',
+  kind: 'INK',
+  name: 'Premium UV Ink',
+  role: { id: 'role-1', usesColours: true },
+  colourSet: {
+    colours: [{ colourId: 'colour-id-1', colour: { name: 'Cyan' } }],
+  },
+};
+
+const inkLineNoColours = {
+  id: 'line-id-2',
+  kind: 'INK',
+  name: 'Solvent Ink',
+  role: { id: 'role-2', usesColours: false },
+  colourSet: null,
+};
+
+const machineLine = {
+  id: 'line-id-3',
+  kind: 'MACHINE',
+  name: 'Konica 512i Printer',
+  role: null,
+  colourSet: null,
+};
+
+const inkUnit = { id: 'unit-id-1', name: 'LTR', appliesTo: ['INK'] };
+const machineUnit = { id: 'unit-id-2', name: 'PCS', appliesTo: ['MACHINE', 'SPARE_PART'] };
 
 describe('ProductService', () => {
   beforeEach(() => {
@@ -66,16 +115,178 @@ describe('ProductService', () => {
   });
 
   describe('create', () => {
-    it('should create and return a product', async () => {
+    it('should create an INK product with a colour, generating the printed name', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
       vi.spyOn(productRepository, 'create').mockResolvedValue(mockProduct as never);
+
       const input = {
-        categoryId: 'cat-id-1',
-        name: 'Cyan 1Ltr',
+        lineId: 'line-id-1',
+        unitId: 'unit-id-1',
+        packSize: 1,
+        colourId: 'colour-id-1',
         basePrice: 0,
+        lowerStockLimit: 0,
       };
       const result = await productService.create(input);
-      expect(productRepository.create).toHaveBeenCalledWith(input);
+
+      expect(productRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lineId: 'line-id-1',
+          unitId: 'unit-id-1',
+          packSize: 1,
+          colourId: 'colour-id-1',
+          name: 'Premium UV Ink – Cyan – 1 LTR',
+        })
+      );
       expect(result).toEqual(mockProduct);
+    });
+
+    it('should throw NotFoundError when the product line does not exist', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(null);
+      await expect(
+        productService.create({
+          lineId: 'missing-line',
+          unitId: 'unit-id-1',
+          packSize: 1,
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw NotFoundError when the unit does not exist', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(null);
+      await expect(
+        productService.create({
+          lineId: 'line-id-1',
+          unitId: 'missing-unit',
+          packSize: 1,
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw BadRequestError when the unit does not apply to the line kind', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(machineUnit as never);
+      await expect(
+        productService.create({
+          lineId: 'line-id-1',
+          unitId: 'unit-id-2',
+          packSize: 1,
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when packSize is missing for an INK product', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
+      await expect(
+        productService.create({
+          lineId: 'line-id-1',
+          unitId: 'unit-id-1',
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when colour is required (role.usesColours) but missing', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
+      await expect(
+        productService.create({
+          lineId: 'line-id-1',
+          unitId: 'unit-id-1',
+          packSize: 1,
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when the colour does not belong to the line colour set', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
+      await expect(
+        productService.create({
+          lineId: 'line-id-1',
+          unitId: 'unit-id-1',
+          packSize: 1,
+          colourId: 'not-in-set',
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it('should allow an INK product on a role that does not use colours, without a colourId', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLineNoColours as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
+      vi.spyOn(productRepository, 'create').mockResolvedValue(mockProduct as never);
+
+      await productService.create({
+        lineId: 'line-id-2',
+        unitId: 'unit-id-1',
+        packSize: 1,
+        basePrice: 0,
+        lowerStockLimit: 0,
+      });
+
+      expect(productRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ colourId: null })
+      );
+    });
+
+    it('should create a MACHINE product using the given name, and reject packSize/colourId', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(machineLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(machineUnit as never);
+      vi.spyOn(productRepository, 'create').mockResolvedValue(mockProduct as never);
+
+      await productService.create({
+        lineId: 'line-id-3',
+        unitId: 'unit-id-2',
+        name: 'Konica 512i Printer Unit A',
+        basePrice: 0,
+        lowerStockLimit: 0,
+      });
+
+      expect(productRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Konica 512i Printer Unit A', packSize: null, colourId: null })
+      );
+    });
+
+    it('should throw BadRequestError when name is missing for a MACHINE product', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(machineLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(machineUnit as never);
+      await expect(
+        productService.create({
+          lineId: 'line-id-3',
+          unitId: 'unit-id-2',
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it('should throw BadRequestError when packSize is set for a MACHINE product', async () => {
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(machineLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(machineUnit as never);
+      await expect(
+        productService.create({
+          lineId: 'line-id-3',
+          unitId: 'unit-id-2',
+          name: 'Printer',
+          packSize: 1,
+          basePrice: 0,
+          lowerStockLimit: 0,
+        })
+      ).rejects.toThrow(BadRequestError);
     });
   });
 
@@ -83,14 +294,35 @@ describe('ProductService', () => {
     it('should update a product when found', async () => {
       const updated = { ...mockProduct, name: 'Updated Name' };
       vi.spyOn(productRepository, 'findById').mockResolvedValue(mockProduct as never);
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
       vi.spyOn(productRepository, 'update').mockResolvedValue(updated as never);
-      const result = await productService.update('prod-id-1', { name: 'Updated Name' });
+
+      const result = await productService.update('prod-id-1', {});
       expect(result.name).toBe('Updated Name');
     });
 
     it('should throw NotFoundError if product does not exist', async () => {
       vi.spyOn(productRepository, 'findById').mockResolvedValue(null);
       await expect(productService.update('bad-id', { name: 'X' })).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw NotFoundError if the (possibly changed) product line does not exist', async () => {
+      vi.spyOn(productRepository, 'findById').mockResolvedValue(mockProduct as never);
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(null);
+      await expect(
+        productService.update('prod-id-1', { lineId: 'missing-line' })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw BadRequestError when colour is required but missing on update', async () => {
+      vi.spyOn(productRepository, 'findById').mockResolvedValue({
+        ...mockProduct,
+        colourId: null,
+      } as never);
+      vi.spyOn(productLineRepository, 'findById').mockResolvedValue(inkLine as never);
+      vi.spyOn(unitRepository, 'findById').mockResolvedValue(inkUnit as never);
+      await expect(productService.update('prod-id-1', {})).rejects.toThrow(BadRequestError);
     });
   });
 
