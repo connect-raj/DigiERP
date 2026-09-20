@@ -26,7 +26,6 @@ export interface DispatchSlipMeta {
 
 export interface DispatchSlipItem {
   productName: string;
-  categoryName: string;
   quantity: number;
   price: number;
   lineTotal: number;
@@ -248,7 +247,7 @@ function buildDispatchSlipDocument(snapshot: DispatchSlipSnapshot) {
             React.createElement(
               Text,
               { style: [styles.cell, styles.cellProduct] },
-              `${item.productName} (${item.categoryName})`
+              item.productName
             ),
             React.createElement(
               Text,

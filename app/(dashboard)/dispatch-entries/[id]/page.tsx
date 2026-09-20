@@ -23,7 +23,7 @@ type DispatchEntryItem = {
   id: string;
   productId: string;
   productName: string;
-  categoryName: string;
+  lineName: string;
   quantity: string | number;
   price: string | number;
   lineTotal: string | number;
@@ -393,7 +393,7 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                 <tr key={item.id}>
                   <td className="px-5 py-3">
                     <span className="text-on-surface block font-medium">{item.productName}</span>
-                    <span className="text-on-surface-variant text-xs">{item.categoryName}</span>
+                    <span className="text-on-surface-variant text-xs">{item.lineName}</span>
                   </td>
                   <td className="px-5 py-3 text-right font-mono">{Number(item.quantity)}</td>
                   <td className="px-5 py-3 text-right font-mono">{formatINR(item.price)}</td>
