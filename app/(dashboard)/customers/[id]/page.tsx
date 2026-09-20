@@ -36,6 +36,16 @@ type PriceHistoryRow = {
   };
 };
 
+type CustomerLineInvoiceName = {
+  id: string;
+  lineId: string;
+  name: string;
+  line: {
+    name: string;
+    kind: string;
+  };
+};
+
 type DispatchEntry = {
   id: string;
   challanNo: string;
@@ -100,6 +110,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [savingPrice, setSavingPrice] = useState(false);
   const [addingPrice, setAddingPrice] = useState(false);
   const [newPriceProductId, setNewPriceProductId] = useState('');
+
+  const [invoiceNames, setInvoiceNames] = useState<CustomerLineInvoiceName[]>([]);
+  const [productLines, setProductLines] = useState<{ id: string; name: string; kind: string }[]>(
+    []
+  );
+  const [editingInvoiceNameId, setEditingInvoiceNameId] = useState<string | null>(null);
+  const [invoiceNameInput, setInvoiceNameInput] = useState('');
+  const [savingInvoiceName, setSavingInvoiceName] = useState(false);
+  const [addingInvoiceName, setAddingInvoiceName] = useState(false);
+  const [newInvoiceNameLineId, setNewInvoiceNameLineId] = useState('');
 
   const [savingBillingMode, setSavingBillingMode] = useState(false);
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
@@ -195,10 +215,71 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     }
   };
 
+  const saveInvoiceName = async (lineId: string) => {
+    if (!invoiceNameInput.trim()) {
+      window.alert('Enter a printed name.');
+      return;
+    }
+    try {
+      setSavingInvoiceName(true);
+      if (editingInvoiceNameId) {
+        const res = await fetch(`/api/customers/${id}/invoice-names/${editingInvoiceNameId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: invoiceNameInput.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          window.alert(data.error?.message ?? 'Failed to update invoice name');
+          return;
+        }
+      } else {
+        const res = await fetch(`/api/customers/${id}/invoice-names`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lineId, name: invoiceNameInput.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          window.alert(data.error?.message ?? 'Failed to add invoice name');
+          return;
+        }
+      }
+      setEditingInvoiceNameId(null);
+      setAddingInvoiceName(false);
+      setNewInvoiceNameLineId('');
+      setInvoiceNameInput('');
+      fetchData();
+    } catch (err) {
+      console.error('Failed to save invoice name', err);
+      window.alert('Failed to save invoice name');
+    } finally {
+      setSavingInvoiceName(false);
+    }
+  };
+
+  const deleteInvoiceName = async (nameId: string) => {
+    if (!window.confirm('Delete this invoice name override?')) return;
+    try {
+      const res = await fetch(`/api/customers/${id}/invoice-names/${nameId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(data.error?.message ?? 'Failed to delete invoice name');
+        return;
+      }
+      fetchData();
+    } catch (err) {
+      console.error('Failed to delete invoice name', err);
+      window.alert('Failed to delete invoice name');
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [custRes, pricesRes, historyRes, dispatchRes, invoicesRes, paymentsRes] =
+      const [custRes, pricesRes, historyRes, dispatchRes, invoicesRes, paymentsRes, invoiceNamesRes] =
         await Promise.all([
           fetch(`/api/customers/${id}`),
           fetch(`/api/customers/${id}/prices`),
@@ -207,6 +288,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           fetch(`/api/dispatch-entries?customerId=${id}`),
           fetch(`/api/invoices?customerId=${id}`),
           fetch(`/api/customers/${id}/payments`),
+          fetch(`/api/customers/${id}/invoice-names`),
         ]);
 
       // The customer record is required; if it fails, surface the error.
@@ -239,6 +321,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         const paymentsData = await paymentsRes.json();
         if (paymentsData.data) setPayments(paymentsData.data.slice(0, 5));
       }
+      if (invoiceNamesRes.ok) {
+        const invoiceNamesData = await invoiceNamesRes.json();
+        if (invoiceNamesData.data) setInvoiceNames(invoiceNamesData.data);
+      }
     } catch (err) {
       console.error('Failed to load customer detail', err);
       setError('Failed to load customer detail.');
@@ -268,6 +354,24 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         }
       })
       .catch((err) => console.error('Failed to fetch products', err));
+  }, []);
+
+  useEffect(() => {
+    // Product-line picker for adding an invoice name override needs the full list.
+    fetch('/api/product-lines?isActive=true&limit=1000')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.data) {
+          setProductLines(
+            data.data.map((l: { id: string; name: string; kind: string }) => ({
+              id: l.id,
+              name: l.name,
+              kind: l.kind,
+            }))
+          );
+        }
+      })
+      .catch((err) => console.error('Failed to fetch product lines', err));
   }, []);
 
   if (loading) {
@@ -516,6 +620,143 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             >
                               <span className="material-symbols-outlined text-[18px]">edit</span>
                             </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DetailCard>
+
+          {/* Invoice Names */}
+          <DetailCard
+            title="Invoice Names"
+            contentClassName="p-0"
+            headerAside={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAddingInvoiceName((v) => !v);
+                  setNewInvoiceNameLineId('');
+                  setInvoiceNameInput('');
+                  setEditingInvoiceNameId(null);
+                }}
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Add Invoice Name
+              </Button>
+            }
+          >
+            {addingInvoiceName && (
+              <div className="border-border bg-surface-container-low flex flex-wrap items-center gap-3 border-b p-4">
+                <select
+                  value={newInvoiceNameLineId}
+                  onChange={(e) => setNewInvoiceNameLineId(e.target.value)}
+                  className="bg-surface-container-lowest border-border text-on-surface focus:border-ring rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                >
+                  <option value="">Select product line…</option>
+                  {productLines.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={invoiceNameInput}
+                  onChange={(e) => setInvoiceNameInput(e.target.value)}
+                  placeholder="Printed name"
+                  className="bg-surface-container-lowest border-border text-on-surface focus:border-ring w-56 rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                />
+                <Button
+                  size="sm"
+                  disabled={!newInvoiceNameLineId || savingInvoiceName}
+                  onClick={() => saveInvoiceName(newInvoiceNameLineId)}
+                >
+                  {savingInvoiceName ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            )}
+
+            {invoiceNames.length === 0 && !addingInvoiceName ? (
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-[40px]">receipt_long</span>}
+                title="No invoice name overrides yet"
+                description="Set a per-customer printed name for a product line when invoices should show something other than the line's own name."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
+                      <th className="px-5 py-3">Product Line</th>
+                      <th className="px-5 py-3">Kind</th>
+                      <th className="px-5 py-3">Printed Name</th>
+                      <th className="px-5 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-border divide-y">
+                    {invoiceNames.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-surface-container transition-colors">
+                        <td className="text-on-surface px-5 py-3 font-medium">
+                          {entry.line.name}
+                        </td>
+                        <td className="text-on-surface-variant px-5 py-3">{entry.line.kind}</td>
+                        <td className="text-on-surface px-5 py-3">
+                          {editingInvoiceNameId === entry.id ? (
+                            <input
+                              type="text"
+                              value={invoiceNameInput}
+                              onChange={(e) => setInvoiceNameInput(e.target.value)}
+                              className="bg-surface-container-lowest border-border focus:border-ring w-56 rounded-lg border px-2 py-1 focus:outline-none"
+                            />
+                          ) : (
+                            entry.name
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {editingInvoiceNameId === entry.id ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                disabled={savingInvoiceName}
+                                onClick={() => saveInvoiceName(entry.lineId)}
+                                className="text-accent-cyan text-[13px] font-semibold disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingInvoiceNameId(null)}
+                                className="text-on-surface-variant text-[13px]"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingInvoiceNameId(entry.id);
+                                  setAddingInvoiceName(false);
+                                  setInvoiceNameInput(entry.name);
+                                }}
+                                className="text-on-surface-variant hover:text-on-surface rounded p-1"
+                                title="Edit printed name"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                              </button>
+                              <button
+                                onClick={() => deleteInvoiceName(entry.id)}
+                                className="text-on-surface-variant hover:text-status-error rounded p-1"
+                                title="Delete"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">
+                                  delete
+                                </span>
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>

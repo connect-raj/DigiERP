@@ -1,7 +1,16 @@
 import prisma from '@/lib/prisma';
 import { Prisma, RecordStatus } from '@prisma/client';
 import { getInvoiceBalance, getCustomerPendingTotal } from '@/lib/balance';
-import { CreateCustomerInput, UpdateCustomerInput } from '@/validations/customer';
+import {
+  CreateCustomerInput,
+  UpdateCustomerInput,
+  CreateCustomerLineInvoiceNameInput,
+  UpdateCustomerLineInvoiceNameInput,
+} from '@/validations/customer';
+
+const lineInvoiceNameInclude = {
+  line: { select: { name: true, kind: true } },
+};
 
 export class CustomerRepository {
   async findAll(params: { search?: string; isActive?: boolean; skip?: number; take?: number }) {
@@ -162,6 +171,37 @@ export class CustomerRepository {
     });
 
     return { ...result, price: Number(result.price) };
+  }
+
+  async findLineInvoiceNamesByCustomerId(customerId: string) {
+    return prisma.customerLineInvoiceName.findMany({
+      where: { customerId },
+      include: lineInvoiceNameInclude,
+      orderBy: { line: { name: 'asc' } },
+    });
+  }
+
+  async findLineInvoiceNameById(id: string) {
+    return prisma.customerLineInvoiceName.findUnique({ where: { id } });
+  }
+
+  async createLineInvoiceName(customerId: string, data: CreateCustomerLineInvoiceNameInput) {
+    return prisma.customerLineInvoiceName.create({
+      data: { customerId, lineId: data.lineId, name: data.name },
+      include: lineInvoiceNameInclude,
+    });
+  }
+
+  async updateLineInvoiceName(id: string, data: UpdateCustomerLineInvoiceNameInput) {
+    return prisma.customerLineInvoiceName.update({
+      where: { id },
+      data,
+      include: lineInvoiceNameInclude,
+    });
+  }
+
+  async deleteLineInvoiceName(id: string) {
+    await prisma.customerLineInvoiceName.delete({ where: { id } });
   }
 }
 
