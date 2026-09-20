@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type DispatchEntryOption = {
   id: string;
@@ -133,7 +134,10 @@ function CreateInvoiceContent() {
       .then((data) => {
         if (data.data) setPickerOptions(data.data);
       })
-      .catch((error) => console.error('Failed to load dispatch entries', error))
+      .catch((error) => {
+        console.error('Failed to load dispatch entries', error);
+        showErrorToast(error, 'Failed to load dispatch entries');
+      })
       .finally(() => setPickerLoading(false));
   }, [preselectedId]);
 
@@ -157,6 +161,7 @@ function CreateInvoiceContent() {
       } catch (err) {
         console.error('Failed to load dispatch entry', err);
         setEntryError('Failed to load dispatch entry.');
+        showErrorToast(err, 'Failed to load dispatch entry');
       } finally {
         setEntryLoading(false);
       }
@@ -189,6 +194,7 @@ function CreateInvoiceContent() {
         );
       } catch (err) {
         console.error('Failed to load invoicing preview', err);
+        showErrorToast(err, 'Failed to load invoicing preview');
       } finally {
         setPreviewLoading(false);
       }
@@ -222,16 +228,19 @@ function CreateInvoiceContent() {
       const result = await res.json();
       if (!res.ok) {
         const code = result.error?.code as string | undefined;
-        setSubmitError(
-          (code && ERROR_MESSAGES[code]) || result.error?.message || 'Failed to generate invoice.'
-        );
+        const message =
+          (code && ERROR_MESSAGES[code]) || result.error?.message || 'Failed to generate invoice.';
+        setSubmitError(message);
+        showErrorToast(result, message);
         setShowConfirm(false);
         return;
       }
+      showSuccessToast('Invoice generated');
       router.push(`/invoices/${result.data.id}`);
     } catch (err) {
       console.error('Failed to generate invoice', err);
       setSubmitError('An unexpected error occurred while generating the invoice.');
+      showErrorToast(err, 'An unexpected error occurred while generating the invoice.');
       setShowConfirm(false);
     } finally {
       setSubmitting(false);

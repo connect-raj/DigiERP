@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { showErrorToast } from '@/lib/toast';
 
 type InvoiceCustomer = { id: string; firmName: string };
 
@@ -89,7 +90,10 @@ function InvoicesContent() {
       .then((data) => {
         if (data.data) setCustomers(data.data);
       })
-      .catch((error) => console.error('Failed to fetch customers', error));
+      .catch((error) => {
+        console.error('Failed to fetch customers', error);
+        showErrorToast(error, 'Failed to load customers');
+      });
   }, []);
 
   const fetchInvoices = async () => {
@@ -121,6 +125,7 @@ function InvoicesContent() {
       }
     } catch (error) {
       console.error('Failed to fetch invoices', error);
+      showErrorToast(error, 'Failed to load invoices');
     } finally {
       setLoading(false);
     }

@@ -10,6 +10,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
 
@@ -88,6 +89,7 @@ function PurchasesContent() {
       }
     } catch (error) {
       console.error('Failed to fetch vendors', error);
+      showErrorToast(error, 'Failed to load vendors');
     }
   };
 
@@ -119,6 +121,7 @@ function PurchasesContent() {
       }
     } catch (error) {
       console.error('Failed to fetch purchases', error);
+      showErrorToast(error, 'Failed to load purchases');
     } finally {
       setLoading(false);
     }

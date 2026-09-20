@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type PaymentOption = {
   id: string;
@@ -83,6 +84,7 @@ export default function AllocatePaymentsModal({
         if (invoicesRes.data) setOpenInvoices(invoicesRes.data);
       } catch (error) {
         console.error('Failed to load allocation data', error);
+        showErrorToast(error, 'Failed to load allocation data');
       } finally {
         setLoading(false);
       }
@@ -100,7 +102,10 @@ export default function AllocatePaymentsModal({
         if (cancelled || !res.data) return;
         setExisting(res.data.allocations ?? []);
       })
-      .catch((error) => console.error('Failed to load payment allocations', error));
+      .catch((error) => {
+        console.error('Failed to load payment allocations', error);
+        showErrorToast(error, 'Failed to load payment allocations');
+      });
     return () => {
       cancelled = true;
     };
@@ -163,14 +168,17 @@ export default function AllocatePaymentsModal({
       const result = await res.json();
       if (!res.ok) {
         setFormError(result.error?.message || 'Failed to allocate payment');
+        showErrorToast(result, 'Failed to allocate payment');
         return;
       }
 
+      showSuccessToast('Payment allocated');
       onSuccess();
       onClose();
     } catch (error) {
       console.error('Failed to allocate payment', error);
       setFormError('An unexpected error occurred while allocating the payment.');
+      showErrorToast(error, 'An unexpected error occurred while allocating the payment.');
     } finally {
       setIsSubmitting(false);
     }

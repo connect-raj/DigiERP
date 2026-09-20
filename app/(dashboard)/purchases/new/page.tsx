@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const purchaseItemSchema = z.object({
   productId: z.string().min(1, 'Product is required'),
@@ -140,14 +141,15 @@ export default function NewPurchasePage() {
       });
 
       if (res.ok) {
+        showSuccessToast('Purchase created');
         router.push('/purchases');
       } else {
         const err = await res.json();
-        alert(`Error: ${err.message}`);
+        showErrorToast(err, 'Failed to create purchase');
       }
     } catch (error) {
       console.error('Failed to create purchase', error);
-      alert('Failed to create purchase');
+      showErrorToast(error, 'Failed to create purchase');
     } finally {
       setIsSubmitting(false);
     }

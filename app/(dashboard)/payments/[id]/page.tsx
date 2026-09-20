@@ -7,6 +7,7 @@ import AllocatePaymentsModal from '../_components/AllocatePaymentsModal';
 import { RegistrationMark } from '@/components/ui/RegistrationMark';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { Button } from '@/components/ui/button';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type Allocation = {
   id: string;
@@ -56,6 +57,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
+  const [isVoiding, setIsVoiding] = useState(false);
 
   const fetchPayment = useCallback(async () => {
     try {
@@ -70,6 +72,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
     } catch (err) {
       console.error('Failed to load payment', err);
       setError('Failed to load payment.');
+      showErrorToast(err, 'Failed to load payment');
     } finally {
       setLoading(false);
     }
@@ -125,16 +128,20 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
       return;
     }
     try {
+      setIsVoiding(true);
       const res = await fetch(`/api/payments/${id}/void`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to void payment');
+        showErrorToast(data, 'Failed to void payment');
         return;
       }
+      showSuccessToast('Payment voided');
       fetchPayment();
     } catch (err) {
       console.error('Failed to void payment', err);
-      window.alert('Failed to void payment');
+      showErrorToast(err, 'Failed to void payment');
+    } finally {
+      setIsVoiding(false);
     }
   };
 
@@ -170,9 +177,9 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
             </Button>
           )}
           {!isVoid && (
-            <Button variant="destructive" size="sm" onClick={handleVoid}>
+            <Button variant="destructive" size="sm" onClick={handleVoid} disabled={isVoiding}>
               <span className="material-symbols-outlined text-[18px]">block</span>
-              Void
+              {isVoiding ? 'Voiding...' : 'Void'}
             </Button>
           )}
         </div>

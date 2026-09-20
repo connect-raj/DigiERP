@@ -7,6 +7,7 @@ import { RegistrationMark } from '@/components/ui/RegistrationMark';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
 import { Button } from '@/components/ui/button';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type Purchase = {
   id: string;
@@ -69,6 +70,8 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isReceiving, setIsReceiving] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const fetchPurchaseData = async () => {
     try {
@@ -92,6 +95,7 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
       }
     } catch (error) {
       console.error('Failed to fetch purchase details', error);
+      showErrorToast(error, 'Failed to load purchase details');
     } finally {
       setLoading(false);
     }
@@ -105,20 +109,24 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
 
   const handleReceive = async () => {
     try {
+      setIsReceiving(true);
       const res = await fetch(`/api/purchases/${purchaseId}/receive`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ receivedDate: new Date().toISOString() }),
       });
       if (res.ok) {
+        showSuccessToast('Purchase marked as received');
         fetchPurchaseData();
       } else {
         const err = await res.json();
-        alert(`Failed to mark received: ${err.message}`);
+        showErrorToast(err, 'Failed to mark received');
       }
     } catch (error) {
       console.error(error);
-      alert('Error marking as received');
+      showErrorToast(error, 'Error marking as received');
+    } finally {
+      setIsReceiving(false);
     }
   };
 
@@ -130,16 +138,20 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
     )
       return;
     try {
+      setIsCancelling(true);
       const res = await fetch(`/api/purchases/${purchaseId}`, { method: 'DELETE' });
       if (res.ok) {
+        showSuccessToast('Purchase cancelled');
         fetchPurchaseData();
       } else {
         const err = await res.json();
-        alert(`Failed to cancel: ${err.message}`);
+        showErrorToast(err, 'Failed to cancel purchase');
       }
     } catch (error) {
       console.error(error);
-      alert('Error cancelling purchase');
+      showErrorToast(error, 'Error cancelling purchase');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -195,9 +207,9 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
             Download PDF
           </Button>
           {!purchase.isCancelled && !purchase.receivedDate && (
-            <Button variant="secondary" size="sm" onClick={handleReceive}>
+            <Button variant="secondary" size="sm" onClick={handleReceive} disabled={isReceiving}>
               <span className="material-symbols-outlined text-[18px]">check_circle</span>
-              Mark Received
+              {isReceiving ? 'Marking...' : 'Mark Received'}
             </Button>
           )}
           {!purchase.isCancelled && pendingAmt > 0 && (
@@ -222,10 +234,11 @@ export default function PurchaseDetailPage({ params }: { params: Promise<{ id: s
                   <div className="bg-border my-1 h-px w-full"></div>
                   <button
                     onClick={handleCancel}
-                    className="hover:bg-status-error/10 text-status-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors"
+                    disabled={isCancelling}
+                    className="hover:bg-status-error/10 text-status-error flex items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[14px] transition-colors disabled:opacity-50"
                   >
-                    <span className="material-symbols-outlined text-[18px]">cancel</span> Cancel
-                    Purchase
+                    <span className="material-symbols-outlined text-[18px]">cancel</span>{' '}
+                    {isCancelling ? 'Cancelling...' : 'Cancel Purchase'}
                   </button>
                 </div>
               </div>

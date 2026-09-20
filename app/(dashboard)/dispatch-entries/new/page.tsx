@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type Customer = {
   id: string;
@@ -98,6 +99,7 @@ export default function NewDispatchEntryPage() {
         if (prodData.data) setProducts(prodData.data);
       } catch (error) {
         console.error('Failed to load initial form data', error);
+        showErrorToast(error, 'Failed to load form data');
       } finally {
         setLoading(false);
       }
@@ -140,6 +142,7 @@ export default function NewDispatchEntryPage() {
         }
       } catch (error) {
         console.error('Failed to fetch customer specific prices', error);
+        showErrorToast(error, 'Failed to fetch customer prices');
       }
     };
 
@@ -284,8 +287,11 @@ export default function NewDispatchEntryPage() {
       if (!res.ok) {
         const errorMsg = result.error?.message || 'Failed to record dispatch entry';
         setFormError(errorMsg);
+        showErrorToast(result, 'Failed to record dispatch entry');
         return;
       }
+
+      showSuccessToast('Dispatch entry recorded');
 
       // The dispatch is recorded regardless; the server returns a non-blocking
       // credit-limit warning when applicable. Surface it, then let the user
@@ -305,6 +311,7 @@ export default function NewDispatchEntryPage() {
     } catch (error) {
       console.error('Submission failed', error);
       setFormError('An unexpected error occurred during submission.');
+      showErrorToast(error, 'An unexpected error occurred during submission.');
     } finally {
       setSubmitting(false);
     }
