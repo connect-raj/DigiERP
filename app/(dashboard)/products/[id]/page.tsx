@@ -6,6 +6,7 @@ import { RegistrationMark } from '@/components/ui/RegistrationMark';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type StockTxn = {
   id: string;
@@ -82,6 +83,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     } catch (err) {
       console.error('Failed to load product', err);
       setError('Failed to load product');
+      showErrorToast(err, 'Failed to load product');
     } finally {
       setLoading(false);
     }
@@ -96,7 +98,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const handleAdjust = async () => {
     const qty = Number(adjustQty);
     if (!Number.isFinite(qty) || qty === 0) {
-      window.alert('Enter a non-zero adjustment quantity (use a negative value to reduce stock).');
+      showErrorToast(
+        null,
+        'Enter a non-zero adjustment quantity (use a negative value to reduce stock).'
+      );
       return;
     }
     try {
@@ -108,14 +113,15 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to adjust stock');
+        showErrorToast(data, 'Failed to adjust stock');
         return;
       }
       setAdjustQty('');
+      showSuccessToast('Stock adjusted');
       fetchProduct();
     } catch (err) {
       console.error('Failed to adjust stock', err);
-      window.alert('Failed to adjust stock');
+      showErrorToast(err, 'Failed to adjust stock');
     } finally {
       setSaving(false);
     }

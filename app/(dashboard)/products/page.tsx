@@ -10,6 +10,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
 
@@ -105,6 +106,7 @@ export default function ProductsPage() {
       if (data.data) setLines(data.data);
     } catch (error) {
       console.error('Failed to fetch product lines', error);
+      showErrorToast(error, 'Failed to load product lines');
     }
   };
 
@@ -115,6 +117,7 @@ export default function ProductsPage() {
       if (data.data) setUnits(data.data);
     } catch (error) {
       console.error('Failed to fetch units', error);
+      showErrorToast(error, 'Failed to load units');
     }
   };
 
@@ -139,6 +142,7 @@ export default function ProductsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch products', error);
+      showErrorToast(error, 'Failed to load products');
     } finally {
       setLoading(false);
     }
@@ -278,14 +282,17 @@ export default function ProductsPage() {
         setIsModalOpen(false);
         setFormData(emptyFormData);
         setEditingId(null);
+        showSuccessToast(editingId ? 'Product updated' : 'Product created');
         fetchProducts();
       } else {
         const error = await res.json();
         setSubmitError(error.error?.message ?? error.message ?? 'Failed to save product.');
+        showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} product`);
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} product`, error);
       setSubmitError(`Failed to ${editingId ? 'update' : 'create'} product.`);
+      showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} product`);
     } finally {
       setIsSubmitting(false);
     }
@@ -307,15 +314,16 @@ export default function ProductsPage() {
       });
 
       if (res.ok) {
+        showSuccessToast('Product deleted');
         fetchProducts();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.message}`);
+        showErrorToast(error, 'Failed to delete product');
         setLoading(false);
       }
     } catch (error) {
       console.error('Failed to delete product', error);
-      alert('Failed to delete product');
+      showErrorToast(error, 'Failed to delete product');
       setLoading(false);
     }
   };

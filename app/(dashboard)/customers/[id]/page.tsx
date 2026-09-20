@@ -11,6 +11,7 @@ import { DetailCard } from '@/components/ui/DetailCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
 import { Button } from '@/components/ui/button';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type CustomerPrice = {
   id: string;
@@ -116,6 +117,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     []
   );
   const [editingInvoiceNameId, setEditingInvoiceNameId] = useState<string | null>(null);
+  const [deletingInvoiceNameId, setDeletingInvoiceNameId] = useState<string | null>(null);
   const [invoiceNameInput, setInvoiceNameInput] = useState('');
   const [savingInvoiceName, setSavingInvoiceName] = useState(false);
   const [addingInvoiceName, setAddingInvoiceName] = useState(false);
@@ -136,13 +138,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to update billing mode');
+        showErrorToast(data, 'Failed to update billing mode');
         return;
       }
+      showSuccessToast('Billing mode updated');
       fetchData();
     } catch (err) {
       console.error('Failed to update billing mode', err);
-      window.alert('Failed to update billing mode');
+      showErrorToast(err, 'Failed to update billing mode');
     } finally {
       setSavingBillingMode(false);
     }
@@ -151,11 +154,11 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const saveOpeningBalance = async () => {
     const parsed = Number(openingBalanceInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
-      window.alert('Enter a valid non-negative opening balance.');
+      showErrorToast(null, 'Enter a valid non-negative opening balance.');
       return;
     }
     if (!openingBalanceDate) {
-      window.alert('Pick an as-of date for the opening balance.');
+      showErrorToast(null, 'Pick an as-of date for the opening balance.');
       return;
     }
     try {
@@ -170,15 +173,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to set opening balance');
+        showErrorToast(data, 'Failed to set opening balance');
         return;
       }
       setOpeningBalanceInput('');
       setOpeningBalanceDate('');
+      showSuccessToast('Opening balance set');
       fetchData();
     } catch (err) {
       console.error('Failed to set opening balance', err);
-      window.alert('Failed to set opening balance');
+      showErrorToast(err, 'Failed to set opening balance');
     } finally {
       setSavingOpeningBalance(false);
     }
@@ -187,7 +191,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const savePrice = async (productId: string) => {
     const parsed = Number(priceInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
-      window.alert('Enter a valid non-negative price.');
+      showErrorToast(null, 'Enter a valid non-negative price.');
       return;
     }
     try {
@@ -199,17 +203,18 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to save price');
+        showErrorToast(data, 'Failed to save price');
         return;
       }
       setEditingProductId(null);
       setAddingPrice(false);
       setNewPriceProductId('');
       setPriceInput('');
+      showSuccessToast('Price saved');
       fetchData();
     } catch (err) {
       console.error('Failed to save price', err);
-      window.alert('Failed to save price');
+      showErrorToast(err, 'Failed to save price');
     } finally {
       setSavingPrice(false);
     }
@@ -217,9 +222,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   const saveInvoiceName = async (lineId: string) => {
     if (!invoiceNameInput.trim()) {
-      window.alert('Enter a printed name.');
+      showErrorToast(null, 'Enter a printed name.');
       return;
     }
+    const wasEditing = !!editingInvoiceNameId;
     try {
       setSavingInvoiceName(true);
       if (editingInvoiceNameId) {
@@ -230,7 +236,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         });
         const data = await res.json();
         if (!res.ok) {
-          window.alert(data.error?.message ?? 'Failed to update invoice name');
+          showErrorToast(data, 'Failed to update invoice name');
           return;
         }
       } else {
@@ -241,7 +247,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         });
         const data = await res.json();
         if (!res.ok) {
-          window.alert(data.error?.message ?? 'Failed to add invoice name');
+          showErrorToast(data, 'Failed to add invoice name');
           return;
         }
       }
@@ -249,10 +255,11 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       setAddingInvoiceName(false);
       setNewInvoiceNameLineId('');
       setInvoiceNameInput('');
+      showSuccessToast(wasEditing ? 'Invoice name updated' : 'Invoice name added');
       fetchData();
     } catch (err) {
       console.error('Failed to save invoice name', err);
-      window.alert('Failed to save invoice name');
+      showErrorToast(err, 'Failed to save invoice name');
     } finally {
       setSavingInvoiceName(false);
     }
@@ -261,18 +268,22 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const deleteInvoiceName = async (nameId: string) => {
     if (!window.confirm('Delete this invoice name override?')) return;
     try {
+      setDeletingInvoiceNameId(nameId);
       const res = await fetch(`/api/customers/${id}/invoice-names/${nameId}`, {
         method: 'DELETE',
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to delete invoice name');
+        showErrorToast(data, 'Failed to delete invoice name');
         return;
       }
+      showSuccessToast('Invoice name deleted');
       fetchData();
     } catch (err) {
       console.error('Failed to delete invoice name', err);
-      window.alert('Failed to delete invoice name');
+      showErrorToast(err, 'Failed to delete invoice name');
+    } finally {
+      setDeletingInvoiceNameId(null);
     }
   };
 
@@ -328,6 +339,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     } catch (err) {
       console.error('Failed to load customer detail', err);
       setError('Failed to load customer detail.');
+      showErrorToast(err, 'Failed to load customer detail');
     } finally {
       setLoading(false);
     }
@@ -353,7 +365,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           );
         }
       })
-      .catch((err) => console.error('Failed to fetch products', err));
+      .catch((err) => {
+        console.error('Failed to fetch products', err);
+        showErrorToast(err, 'Failed to load products');
+      });
   }, []);
 
   useEffect(() => {
@@ -371,7 +386,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           );
         }
       })
-      .catch((err) => console.error('Failed to fetch product lines', err));
+      .catch((err) => {
+        console.error('Failed to fetch product lines', err);
+        showErrorToast(err, 'Failed to load product lines');
+      });
   }, []);
 
   if (loading) {
@@ -749,7 +767,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                               </button>
                               <button
                                 onClick={() => deleteInvoiceName(entry.id)}
-                                className="text-on-surface-variant hover:text-status-error rounded p-1"
+                                disabled={deletingInvoiceNameId === entry.id}
+                                className="text-on-surface-variant hover:text-status-error rounded p-1 disabled:opacity-50"
                                 title="Delete"
                               >
                                 <span className="material-symbols-outlined text-[18px]">

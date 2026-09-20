@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
 
@@ -38,6 +39,7 @@ export default function ProductLinesPage() {
   const [kind, setKind] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const fetchLines = async () => {
     try {
@@ -58,6 +60,7 @@ export default function ProductLinesPage() {
       }
     } catch (error) {
       console.error('Failed to fetch product lines', error);
+      showErrorToast(error, 'Failed to load product lines');
     } finally {
       setLoading(false);
     }
@@ -65,20 +68,24 @@ export default function ProductLinesPage() {
 
   const handleToggleActive = async (line: ProductLine) => {
     try {
+      setTogglingId(line.id);
       const res = await fetch(`/api/product-lines/${line.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !line.isActive }),
       });
       if (res.ok) {
+        showSuccessToast(line.isActive ? 'Product line deactivated' : 'Product line activated');
         fetchLines();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.error?.message ?? 'Failed to update status'}`);
+        showErrorToast(error, 'Failed to update status');
       }
     } catch (error) {
       console.error('Failed to toggle status', error);
-      alert('Failed to update status');
+      showErrorToast(error, 'Failed to update status');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -95,15 +102,16 @@ export default function ProductLinesPage() {
       setLoading(true);
       const res = await fetch(`/api/product-lines/${id}`, { method: 'DELETE' });
       if (res.ok) {
+        showSuccessToast('Product line deleted');
         fetchLines();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.error?.message ?? 'Failed to delete product line'}`);
+        showErrorToast(error, 'Failed to delete product line');
         setLoading(false);
       }
     } catch (error) {
       console.error('Failed to delete product line', error);
-      alert('Failed to delete product line');
+      showErrorToast(error, 'Failed to delete product line');
       setLoading(false);
     }
   };
@@ -188,10 +196,12 @@ export default function ProductLinesPage() {
               e.stopPropagation();
               handleToggleActive(row.original);
             }}
+            disabled={togglingId === row.original.id}
             className={
-              row.original.isActive
+              (row.original.isActive
                 ? 'bg-status-success/12 text-status-success rounded-full px-2 py-0.5 text-[11px] font-medium uppercase'
-                : 'bg-status-neutral/12 text-status-neutral rounded-full px-2 py-0.5 text-[11px] font-medium uppercase'
+                : 'bg-status-neutral/12 text-status-neutral rounded-full px-2 py-0.5 text-[11px] font-medium uppercase') +
+              ' disabled:opacity-50'
             }
             title="Click to toggle status"
           >
@@ -231,7 +241,7 @@ export default function ProductLinesPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [togglingId]
   );
 
   return (

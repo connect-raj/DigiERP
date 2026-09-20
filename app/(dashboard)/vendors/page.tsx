@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar } from '@/components/ui/ListToolbar';
 import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -69,6 +70,7 @@ export default function VendorsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch vendors', error);
+      showErrorToast(error, 'Failed to load vendors');
     } finally {
       setLoading(false);
     }
@@ -160,14 +162,18 @@ export default function VendorsPage() {
           isActive: true,
         });
         setEditingId(null);
+        showSuccessToast(editingId ? 'Vendor updated' : 'Vendor created');
         fetchVendors();
       } else {
         const error = await res.json();
-        setSubmitError(error.error?.message ?? error.message ?? 'Failed to save vendor.');
+        const message = error.error?.message ?? error.message ?? 'Failed to save vendor.';
+        setSubmitError(message);
+        showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} vendor`);
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} vendor`, error);
       setSubmitError(`Failed to ${editingId ? 'update' : 'create'} vendor.`);
+      showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} vendor`);
     } finally {
       setIsSubmitting(false);
     }
@@ -189,15 +195,16 @@ export default function VendorsPage() {
       });
 
       if (res.ok) {
+        showSuccessToast('Vendor deleted');
         fetchVendors();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.message}`);
+        showErrorToast(error, 'Failed to delete vendor');
         setLoading(false);
       }
     } catch (error) {
       console.error('Failed to delete vendor', error);
-      alert('Failed to delete vendor');
+      showErrorToast(error, 'Failed to delete vendor');
       setLoading(false);
     }
   };

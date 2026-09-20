@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FieldLabel, FormField, SubmitError, TextInput } from '@/components/ui/form';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 export type Customer = {
   id: string;
@@ -144,14 +145,17 @@ export default function CustomerFormDrawer({
 
       if (!res.ok) {
         setSubmitError(result.error?.message || 'Failed to save customer.');
+        showErrorToast(result, 'Failed to save customer');
         return;
       }
 
+      showSuccessToast(editingCustomer ? 'Customer updated' : 'Customer created');
       onSuccess();
       onClose();
     } catch (error) {
       console.error('Failed to save customer', error);
       setSubmitError('An unexpected error occurred while saving.');
+      showErrorToast(error, 'Failed to save customer');
     } finally {
       setIsSubmitting(false);
     }

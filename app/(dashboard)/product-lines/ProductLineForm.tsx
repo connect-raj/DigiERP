@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type Kind = 'INK' | 'MACHINE' | 'SPARE_PART';
 
@@ -85,6 +86,7 @@ export default function ProductLineForm({ lineId }: { lineId?: string }) {
         setTaxClasses(tc);
       } catch (error) {
         console.error('Failed to load lookup data', error);
+        showErrorToast(error, 'Failed to load lookup data');
       }
     };
     loadLookups();
@@ -115,6 +117,7 @@ export default function ProductLineForm({ lineId }: { lineId?: string }) {
       } catch (error) {
         console.error('Failed to load product line', error);
         setSubmitError('Failed to load product line.');
+        showErrorToast(error, 'Failed to load product line');
       } finally {
         setLoading(false);
       }
@@ -188,12 +191,15 @@ export default function ProductLineForm({ lineId }: { lineId?: string }) {
       const result = await res.json();
       if (!res.ok) {
         setSubmitError(result.error?.message ?? 'Failed to save product line.');
+        showErrorToast(result, 'Failed to save product line');
         return;
       }
+      showSuccessToast(isEdit ? 'Product line updated' : 'Product line created');
       router.push('/product-lines');
     } catch (error) {
       console.error('Failed to save product line', error);
       setSubmitError('An unexpected error occurred during submission.');
+      showErrorToast(error, 'Failed to save product line');
     } finally {
       setSubmitting(false);
     }

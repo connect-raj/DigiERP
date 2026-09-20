@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Pagination from '@/components/ui/Pagination';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
 
@@ -165,6 +166,7 @@ export default function CatalogueSettingsPage() {
       }
     } catch (error) {
       console.error(`Failed to fetch ${tab.label}`, error);
+      showErrorToast(error, `Failed to load ${tab.label.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
@@ -177,6 +179,7 @@ export default function CatalogueSettingsPage() {
       if (data.data) setAllColours(data.data);
     } catch (error) {
       console.error('Failed to fetch colours', error);
+      showErrorToast(error, 'Failed to load colours');
     }
   };
 
@@ -239,16 +242,20 @@ export default function CatalogueSettingsPage() {
       if (res.ok) {
         setIsModalOpen(false);
         setForm(EMPTY_FORM);
+        const wasEditing = !!editingId;
         setEditingId(null);
+        showSuccessToast(`${tab.label.replace(/s$/, '')} ${wasEditing ? 'updated' : 'created'}`);
         fetchItems();
         if (activeTab === 'colours') fetchAllColours();
       } else {
         const error = await res.json();
         setSubmitError(error.error?.message ?? error.message ?? 'Failed to save.');
+        showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} ${tab.label.toLowerCase()}`);
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} ${tab.label}`, error);
       setSubmitError(`Failed to ${editingId ? 'update' : 'create'}.`);
+      showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} ${tab.label.toLowerCase()}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -268,15 +275,16 @@ export default function CatalogueSettingsPage() {
       const res = await fetch(`${tab.apiPath}/${item.id}`, { method: 'DELETE' });
 
       if (res.ok) {
+        showSuccessToast(`${tab.label.replace(/s$/, '')} deleted`);
         fetchItems();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.error?.message ?? error.message ?? 'Failed to delete.'}`);
+        showErrorToast(error, 'Failed to delete');
         setLoading(false);
       }
     } catch (error) {
       console.error(`Failed to delete`, error);
-      alert('Failed to delete.');
+      showErrorToast(error, 'Failed to delete');
       setLoading(false);
     }
   };
