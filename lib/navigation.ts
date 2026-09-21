@@ -18,8 +18,12 @@ export const DASHBOARD_ITEM: NavItem = { label: 'Dashboard', href: '/', icon: 'd
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Catalog',
-    items: [{ label: 'Products', href: '/products', icon: 'inventory_2' }],
+    label: 'Catalogue',
+    items: [
+      { label: 'Product Lines', href: '/product-lines', icon: 'category' },
+      { label: 'Products', href: '/products', icon: 'inventory_2' },
+      { label: 'Catalogue Settings', href: '/catalogue/settings', icon: 'tune' },
+    ],
   },
   {
     label: 'Procurement',
@@ -101,7 +105,6 @@ export function buildBreadcrumbs(pathname: string): Crumb[] {
     return crumbs;
   }
 
-  // Routes not present in the nav (e.g. /categories, reachable but demoted).
   const first = pathname.split('/').filter(Boolean)[0] ?? '';
   return [{ label: titleCase(first) }];
 }

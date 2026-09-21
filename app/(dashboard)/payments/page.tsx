@@ -10,6 +10,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { showErrorToast } from '@/lib/toast';
 
 type PaymentCustomer = { id: string; firmName: string };
 type RecordedBy = { id: string; username: string } | null;
@@ -156,7 +157,10 @@ function PaymentsContent() {
       .then((data) => {
         if (data.data) setCustomers(data.data);
       })
-      .catch((error) => console.error('Failed to fetch customers', error));
+      .catch((error) => {
+        console.error('Failed to fetch customers', error);
+        showErrorToast(error, 'Failed to load customers');
+      });
   }, []);
 
   // Re-seed the customer filter when the URL query changes (query-only nav doesn't remount).
@@ -194,6 +198,7 @@ function PaymentsContent() {
       }
     } catch (error) {
       console.error('Failed to fetch payments', error);
+      showErrorToast(error, 'Failed to load payments');
     } finally {
       setLoading(false);
     }

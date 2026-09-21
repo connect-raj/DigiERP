@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const purchaseItemSchema = z.object({
   productId: z.string().min(1, 'Product is required'),
@@ -33,8 +34,13 @@ type Product = {
   id: string;
   name: string;
   basePrice: string | number;
-  category: { gstRate: string | number };
+  taxClass: { gstRate: string | number } | null;
+  line: { taxClass: { gstRate: string | number } };
 };
+
+function getEffectiveGstRate(product: Product): number {
+  return Number(product.taxClass?.gstRate ?? product.line.taxClass.gstRate);
+}
 
 const COMPANY_STATE = 'Gujarat';
 
@@ -88,7 +94,7 @@ export default function NewPurchasePage() {
         sub += itemSubtotal;
 
         if (product) {
-          const gstRate = Number(product.category.gstRate);
+          const gstRate = getEffectiveGstRate(product);
           tax += (itemSubtotal * gstRate) / 100;
         }
       }
@@ -135,14 +141,15 @@ export default function NewPurchasePage() {
       });
 
       if (res.ok) {
+        showSuccessToast('Purchase created');
         router.push('/purchases');
       } else {
         const err = await res.json();
-        alert(`Error: ${err.message}`);
+        showErrorToast(err, 'Failed to create purchase');
       }
     } catch (error) {
       console.error('Failed to create purchase', error);
-      alert('Failed to create purchase');
+      showErrorToast(error, 'Failed to create purchase');
     } finally {
       setIsSubmitting(false);
     }
@@ -314,7 +321,7 @@ export default function NewPurchasePage() {
                 {fields.map((field, index) => {
                   const item = watchItems[index];
                   const product = products.find((p) => p.id === item?.productId);
-                  const taxPercent = product ? Number(product.category.gstRate) : 0;
+                  const taxPercent = product ? getEffectiveGstRate(product) : 0;
                   const lineBaseTotal = (item?.quantity || 0) * (item?.unitPrice || 0);
                   const lineTax = (lineBaseTotal * taxPercent) / 100;
                   const lineTotal = lineBaseTotal + lineTax;

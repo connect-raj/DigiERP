@@ -4,6 +4,8 @@ import {
   createCustomerSchema,
   updateCustomerSchema,
   setCustomerPriceSchema,
+  createCustomerLineInvoiceNameSchema,
+  updateCustomerLineInvoiceNameSchema,
 } from '@/validations/customer';
 import { successResponse, paginatedResponse, BadRequestError } from '@/lib/errors';
 import { parsePagination } from '@/lib/pagination';
@@ -91,6 +93,50 @@ export class CustomerController {
 
     const price = await customerService.setManualPrice(id, productId, validated.data.price);
     return successResponse(price);
+  }
+
+  async getLineInvoiceNames(_req: NextRequest, id: string) {
+    const names = await customerService.getLineInvoiceNames(id);
+    return successResponse(names);
+  }
+
+  async createLineInvoiceName(req: NextRequest, id: string) {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      throw new BadRequestError('Invalid JSON body');
+    }
+
+    const validated = createCustomerLineInvoiceNameSchema.safeParse(body);
+    if (!validated.success) {
+      throw new BadRequestError(validated.error.issues[0]?.message ?? 'Validation error');
+    }
+
+    const name = await customerService.createLineInvoiceName(id, validated.data);
+    return successResponse(name, 201);
+  }
+
+  async updateLineInvoiceName(req: NextRequest, id: string, nameId: string) {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      throw new BadRequestError('Invalid JSON body');
+    }
+
+    const validated = updateCustomerLineInvoiceNameSchema.safeParse(body);
+    if (!validated.success) {
+      throw new BadRequestError(validated.error.issues[0]?.message ?? 'Validation error');
+    }
+
+    const name = await customerService.updateLineInvoiceName(id, nameId, validated.data);
+    return successResponse(name);
+  }
+
+  async deleteLineInvoiceName(_req: NextRequest, id: string, nameId: string) {
+    await customerService.deleteLineInvoiceName(id, nameId);
+    return successResponse({ id: nameId });
   }
 }
 

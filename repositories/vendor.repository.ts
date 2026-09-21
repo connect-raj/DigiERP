@@ -41,7 +41,7 @@ export class VendorRepository {
             productId: true,
             isPreferred: true,
             product: {
-              select: { id: true, name: true, category: { select: { name: true } } },
+              select: { id: true, name: true, line: { select: { id: true, name: true } } },
             },
           },
         },

@@ -53,7 +53,7 @@ export class DispatchEntryController {
         id: item.id,
         productId: item.productId,
         productName: item.product.name,
-        categoryName: item.product.category.name,
+        lineName: item.product.line.name,
         quantity: item.quantity,
         price: item.price,
         lineTotal: item.lineTotal,
@@ -113,7 +113,6 @@ export class DispatchEntryController {
       },
       items: dispatchEntry.items.map((item) => ({
         productName: item.product.name,
-        categoryName: item.product.category.name,
         quantity: Number(item.quantity),
         price: Number(item.price),
         lineTotal: Number(item.lineTotal),

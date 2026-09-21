@@ -5,6 +5,7 @@ import { DetailCard } from '@/components/ui/DetailCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { RegistrationMark } from '@/components/ui/RegistrationMark';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
+import { showErrorToast } from '@/lib/toast';
 
 type Breakdown = { invoiceId: string | null; invoiceNo: string | null; amount: number };
 
@@ -61,11 +62,16 @@ export function LedgerView({ customerId }: { customerId: string }) {
         const ledgerRes = await fetch(`/api/customers/${customerId}/ledger`).then((r) => r.json());
         if (cancelled) return;
         if (ledgerRes.data) setEntries(ledgerRes.data);
-        else setError(ledgerRes.error?.message || 'Failed to load ledger');
+        else {
+          const message = ledgerRes.error?.message || 'Failed to load ledger';
+          setError(message);
+          showErrorToast(ledgerRes, message);
+        }
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to load ledger', err);
         setError('Failed to load ledger.');
+        showErrorToast(err, 'Failed to load ledger');
       } finally {
         if (!cancelled) setLoading(false);
       }

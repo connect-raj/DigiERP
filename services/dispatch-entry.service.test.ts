@@ -39,7 +39,7 @@ const product = {
   name: 'Ink Red',
   basePrice: 100,
   currentStock: 50,
-  category: { id: 'cat-1', name: 'Ink', gstRate: 18 },
+  line: { id: 'line-1', name: 'Premium UV Ink', kind: 'INK' },
 };
 
 const baseInput: CreateDispatchEntryInput = {

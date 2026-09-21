@@ -9,31 +9,31 @@ interface LowStockAlertsProps {
   data: LowStockProduct[];
 }
 
-type ViewMode = 'list' | 'category';
+type ViewMode = 'list' | 'line';
 
 const VIEW_LABEL: Record<ViewMode, string> = {
   list: 'List',
-  category: 'By Category',
+  line: 'By Product Line',
 };
 
-function groupByCategory(data: LowStockProduct[]) {
-  const groups = new Map<string, { categoryName: string; items: LowStockProduct[] }>();
+function groupByLine(data: LowStockProduct[]) {
+  const groups = new Map<string, { lineName: string; items: LowStockProduct[] }>();
 
   for (const product of data) {
-    const existing = groups.get(product.categoryId);
+    const existing = groups.get(product.lineId);
     if (existing) {
       existing.items.push(product);
     } else {
-      groups.set(product.categoryId, {
-        categoryName: product.categoryName,
+      groups.set(product.lineId, {
+        lineName: product.lineName,
         items: [product],
       });
     }
   }
 
   return [...groups.entries()]
-    .map(([categoryId, group]) => ({ categoryId, ...group }))
-    .sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+    .map(([lineId, group]) => ({ lineId, ...group }))
+    .sort((a, b) => a.lineName.localeCompare(b.lineName));
 }
 
 function LowStockRow({ product, onClick }: { product: LowStockProduct; onClick: () => void }) {
@@ -64,7 +64,7 @@ export default function LowStockAlerts({ data }: LowStockAlertsProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="border-outline-variant flex w-fit overflow-hidden rounded border-[0.5px]">
-        {(['list', 'category'] as const).map((mode) => (
+        {(['list', 'line'] as const).map((mode) => (
           <button
             key={mode}
             onClick={() => setView(mode)}
@@ -91,10 +91,10 @@ export default function LowStockAlerts({ data }: LowStockAlertsProps) {
         </ul>
       ) : (
         <div className="flex flex-col gap-4">
-          {groupByCategory(data).map((group) => (
-            <div key={group.categoryId}>
+          {groupByLine(data).map((group) => (
+            <div key={group.lineId}>
               <p className="text-label-caps text-on-surface-variant mb-1 uppercase">
-                {group.categoryName}
+                {group.lineName}
               </p>
               <ul className="divide-outline-variant divide-y-[0.5px]">
                 {group.items.map((product) => (

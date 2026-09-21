@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar } from '@/components/ui/ListToolbar';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
 
@@ -30,6 +31,7 @@ export default function CustomersPage() {
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const fetchCustomers = async () => {
     try {
@@ -49,6 +51,7 @@ export default function CustomersPage() {
       }
     } catch (error) {
       console.error('Failed to fetch customers', error);
+      showErrorToast(error, 'Failed to load customers');
     } finally {
       setLoading(false);
     }
@@ -83,16 +86,20 @@ export default function CustomersPage() {
       return;
     }
     try {
+      setDeactivatingId(customer.id);
       const res = await fetch(`/api/customers/${customer.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to deactivate customer');
+        showErrorToast(data, 'Failed to deactivate customer');
         return;
       }
+      showSuccessToast('Customer deactivated');
       fetchCustomers();
     } catch (error) {
       console.error('Failed to deactivate customer', error);
-      window.alert('Failed to deactivate customer');
+      showErrorToast(error, 'Failed to deactivate customer');
+    } finally {
+      setDeactivatingId(null);
     }
   };
 
@@ -201,7 +208,8 @@ export default function CustomersPage() {
                 e.stopPropagation();
                 handleDeactivate(row.original);
               }}
-              className="text-on-surface-variant hover:text-status-error hover:bg-surface-container-high rounded p-1.5 transition-colors"
+              disabled={deactivatingId === row.original.id}
+              className="text-on-surface-variant hover:text-status-error hover:bg-surface-container-high rounded p-1.5 transition-colors disabled:opacity-50"
               title="Deactivate"
             >
               <span className="material-symbols-outlined text-[18px]">person_off</span>

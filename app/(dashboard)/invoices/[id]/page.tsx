@@ -9,6 +9,7 @@ import { DetailCard } from '@/components/ui/DetailCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
 import { Button } from '@/components/ui/button';
+import { showErrorToast } from '@/lib/toast';
 
 type InvoiceItem = {
   id: string;
@@ -105,6 +106,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     } catch (err) {
       console.error('Failed to load invoice', err);
       setError('Failed to load invoice.');
+      showErrorToast(err, 'Failed to load invoice');
     } finally {
       setLoading(false);
     }

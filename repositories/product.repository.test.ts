@@ -25,16 +25,22 @@ vi.mock('@/lib/prisma', () => ({
 
 const mockProduct = {
   id: 'prod-id-1',
-  name: 'Cyan 1Ltr',
-  categoryId: 'cat-id-1',
+  name: 'Premium UV Ink – Cyan – 1 LTR',
+  lineId: 'line-id-1',
+  unitId: 'unit-id-1',
+  packSize: new Decimal('1'),
+  colourId: 'colour-id-1',
+  taxClassId: null,
   basePrice: new Decimal('0.00'),
-  unit: 'LTR',
   currentStock: new Decimal('10.000'),
   lowerStockLimit: new Decimal('2.000'),
   isActive: true,
   createdAt: new Date(),
   updatedAt: new Date(),
-  category: { id: 'cat-id-1', name: 'Konica 512i Solvent Ink' },
+  line: { id: 'line-id-1', name: 'Premium UV Ink', kind: 'INK', taxClass: { id: 'tc-1' } },
+  unit: { id: 'unit-id-1', name: 'LTR' },
+  colour: { id: 'colour-id-1', name: 'Cyan' },
+  taxClass: null,
   vendorProducts: [],
   stockTxns: [],
 };
@@ -49,7 +55,7 @@ describe('ProductRepository', () => {
       vi.mocked(prisma.product.count).mockResolvedValue(0);
     });
 
-    it('should return products with category and vendors, plus total count', async () => {
+    it('should return products with line/unit/colour/taxClass and vendors, plus total count', async () => {
       vi.mocked(prisma.product.findMany).mockResolvedValue([mockProduct as never]);
       vi.mocked(prisma.product.count).mockResolvedValue(1);
       const result = await productRepository.findAll({});
@@ -57,12 +63,12 @@ describe('ProductRepository', () => {
       expect(result).toEqual({ data: [mockProduct], total: 1 });
     });
 
-    it('should filter by categoryId', async () => {
+    it('should filter by lineId', async () => {
       vi.mocked(prisma.product.findMany).mockResolvedValue([]);
-      await productRepository.findAll({ categoryId: 'cat-id-1' });
+      await productRepository.findAll({ lineId: 'line-id-1' });
       expect(prisma.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ categoryId: 'cat-id-1' }),
+          where: expect.objectContaining({ lineId: 'line-id-1' }),
         })
       );
     });
@@ -77,7 +83,7 @@ describe('ProductRepository', () => {
       );
     });
 
-    it('should search by name or category name', async () => {
+    it('should search by name or line name', async () => {
       vi.mocked(prisma.product.findMany).mockResolvedValue([]);
       await productRepository.findAll({ search: 'cyan' });
       expect(prisma.product.findMany).toHaveBeenCalledWith(
@@ -85,7 +91,7 @@ describe('ProductRepository', () => {
           where: expect.objectContaining({
             OR: [
               { name: { contains: 'cyan', mode: 'insensitive' } },
-              { category: { name: { contains: 'cyan', mode: 'insensitive' } } },
+              { line: { name: { contains: 'cyan', mode: 'insensitive' } } },
             ],
           }),
         })
@@ -126,9 +132,18 @@ describe('ProductRepository', () => {
   describe('create', () => {
     it('should create a product', async () => {
       vi.mocked(prisma.product.create).mockResolvedValue(mockProduct as never);
-      const input = { categoryId: 'cat-id-1', name: 'Cyan 1Ltr', basePrice: 0 };
+      const input = {
+        lineId: 'line-id-1',
+        name: 'Premium UV Ink – Cyan – 1 LTR',
+        unitId: 'unit-id-1',
+        packSize: 1,
+        colourId: 'colour-id-1',
+        basePrice: 0,
+      };
       const result = await productRepository.create(input);
-      expect(prisma.product.create).toHaveBeenCalledWith({ data: input });
+      expect(prisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: input })
+      );
       expect(result).toEqual(mockProduct);
     });
   });
@@ -138,10 +153,12 @@ describe('ProductRepository', () => {
       const updated = { ...mockProduct, name: 'Updated Name' };
       vi.mocked(prisma.product.update).mockResolvedValue(updated as never);
       const result = await productRepository.update('prod-id-1', { name: 'Updated Name' });
-      expect(prisma.product.update).toHaveBeenCalledWith({
-        where: { id: 'prod-id-1' },
-        data: { name: 'Updated Name' },
-      });
+      expect(prisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'prod-id-1' },
+          data: { name: 'Updated Name' },
+        })
+      );
       expect(result.name).toBe('Updated Name');
     });
   });

@@ -7,6 +7,7 @@ import { successResponse, paginatedResponse, BadRequestError, NotFoundError } fr
 import { parsePagination } from '@/lib/pagination';
 import { generatePurchaseNo } from '@/lib/purchase-no';
 import { determineGstType } from '@/lib/gst';
+import { getEffectiveTaxClass, assertHasHsnCode } from '@/lib/tax-class';
 
 const purchaseCreateSchema = z.object({
   vendorId: z.string().uuid(),
@@ -130,7 +131,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   const productIds = data.items.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
-    include: { category: true },
+    include: { taxClass: true, line: { include: { taxClass: true } } },
   });
 
   if (products.length !== productIds.length) {
@@ -145,7 +146,9 @@ export const POST = asyncHandler(async (request: NextRequest) => {
 
   const purchaseItemsData = data.items.map((item) => {
     const product = productMap.get(item.productId)!;
-    const gstRate = Number(product.category.gstRate);
+    const effectiveTaxClass = getEffectiveTaxClass(product);
+    assertHasHsnCode(effectiveTaxClass, product.name);
+    const gstRate = Number(effectiveTaxClass.gstRate);
     const qty = item.quantity;
     const price = item.unitPrice;
     const itemBaseTotal = qty * price;

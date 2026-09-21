@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type DispatchEntryOption = {
   id: string;
@@ -14,11 +15,46 @@ type DispatchEntryItem = {
   id: string;
   productId: string;
   productName: string;
-  categoryName: string;
   quantity: string | number;
   price: string | number;
   lineTotal: string | number;
 };
+
+type InvoicePreviewItem = {
+  productId: string;
+  productName: string;
+  lineId: string;
+  lineKind: 'INK' | 'MACHINE' | 'SPARE_PART';
+  lineName: string;
+  baseName: string;
+  printedName: string;
+  colourName: string | null;
+  packSize: number | null;
+  unitName: string;
+  quantity: number;
+  price: number;
+  priceIsZero: boolean;
+  taxClassMissingHsn: boolean;
+};
+
+type InvoicePreview = {
+  dispatchEntryId: string;
+  customerId: string;
+  items: InvoicePreviewItem[];
+};
+
+function computePrintedName(item: InvoicePreviewItem, editedBaseName: string) {
+  if (item.lineKind === 'INK') {
+    return [
+      editedBaseName,
+      item.colourName,
+      item.packSize != null ? `${item.packSize} ${item.unitName}` : null,
+    ]
+      .filter((part): part is string => part != null && part !== '')
+      .join(' – ');
+  }
+  return editedBaseName;
+}
 
 type DispatchEntry = {
   id: string;
@@ -46,6 +82,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   DISPATCH_ENTRY_CANCELLED: 'This dispatch entry was cancelled and cannot be invoiced.',
   SETTINGS_NOT_CONFIGURED:
     'Company settings are not configured. Please contact your administrator.',
+  PRICE_NOT_SET:
+    'Price not set for one of the items — set a customer price or product base price before invoicing.',
+  TAX_CLASS_MISSING_HSN:
+    "One of the items' tax class has no HSN code set — fix it in Settings before invoicing.",
 };
 
 function formatINR(val: string | number) {
@@ -77,10 +117,20 @@ function CreateInvoiceContent() {
   const [entryLoading, setEntryLoading] = useState(false);
   const [entryError, setEntryError] = useState<string | null>(null);
 
+  const [preview, setPreview] = useState<InvoicePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  // Per-product edited base name (line-name tier only — colour/pack suffix stays auto-appended).
+  const [editedNames, setEditedNames] = useState<Record<string, string>>({});
+  const [rememberFlags, setRememberFlags] = useState<Record<string, boolean>>({});
+
   const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const hasBlockingItemIssue = (preview?.items ?? []).some(
+    (item) => item.priceIsZero || item.taxClassMissingHsn
+  );
 
   useEffect(() => {
     if (preselectedId) return;
@@ -90,7 +140,10 @@ function CreateInvoiceContent() {
       .then((data) => {
         if (data.data) setPickerOptions(data.data);
       })
-      .catch((error) => console.error('Failed to load dispatch entries', error))
+      .catch((error) => {
+        console.error('Failed to load dispatch entries', error);
+        showErrorToast(error, 'Failed to load dispatch entries');
+      })
       .finally(() => setPickerLoading(false));
   }, [preselectedId]);
 
@@ -114,6 +167,7 @@ function CreateInvoiceContent() {
       } catch (err) {
         console.error('Failed to load dispatch entry', err);
         setEntryError('Failed to load dispatch entry.');
+        showErrorToast(err, 'Failed to load dispatch entry');
       } finally {
         setEntryLoading(false);
       }
@@ -121,32 +175,78 @@ function CreateInvoiceContent() {
     fetchEntry();
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!selectedId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPreview(null);
+      return;
+    }
+    const fetchPreview = async () => {
+      try {
+        setPreviewLoading(true);
+        const res = await fetch(
+          `/api/invoices/preview?dispatchEntryId=${encodeURIComponent(selectedId)}`
+        );
+        const data = await res.json();
+        if (!res.ok || !data.data) {
+          console.error('Failed to load invoicing preview', data.error);
+          return;
+        }
+        setPreview(data.data);
+        setEditedNames(
+          Object.fromEntries(
+            (data.data as InvoicePreview).items.map((item) => [item.productId, item.baseName])
+          )
+        );
+      } catch (err) {
+        console.error('Failed to load invoicing preview', err);
+        showErrorToast(err, 'Failed to load invoicing preview');
+      } finally {
+        setPreviewLoading(false);
+      }
+    };
+    fetchPreview();
+  }, [selectedId]);
+
   const handleGenerate = async () => {
     if (!entry) return;
     try {
       setSubmitting(true);
       setSubmitError(null);
+
+      const items = (preview?.items ?? [])
+        .filter((item) => editedNames[item.productId] !== item.baseName)
+        .map((item) => ({
+          productId: item.productId,
+          printedNameOverride: editedNames[item.productId],
+          rememberForCustomer: rememberFlags[item.productId] ?? false,
+        }));
+
       const res = await fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dispatchEntryId: entry.id,
           date: new Date(invoiceDate).toISOString(),
+          ...(items.length > 0 && { items }),
         }),
       });
       const result = await res.json();
       if (!res.ok) {
         const code = result.error?.code as string | undefined;
-        setSubmitError(
-          (code && ERROR_MESSAGES[code]) || result.error?.message || 'Failed to generate invoice.'
-        );
+        const message =
+          (code && ERROR_MESSAGES[code]) || result.error?.message || 'Failed to generate invoice.';
+        setSubmitError(message);
+        showErrorToast(result, message);
         setShowConfirm(false);
         return;
       }
+      showSuccessToast('Invoice generated');
       router.push(`/invoices/${result.data.id}`);
     } catch (err) {
       console.error('Failed to generate invoice', err);
       setSubmitError('An unexpected error occurred while generating the invoice.');
+      showErrorToast(err, 'An unexpected error occurred while generating the invoice.');
       setShowConfirm(false);
     } finally {
       setSubmitting(false);
@@ -344,43 +444,96 @@ function CreateInvoiceContent() {
               <span className="material-symbols-outlined text-secondary">category</span>
               Line Items
             </h2>
-            <table className="w-full min-w-[600px] text-left">
-              <thead>
-                <tr className="border-outline-variant border-b-[0.5px]">
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 uppercase">
-                    Product
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
-                    Qty
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
-                    Price
-                  </th>
-                  <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {entry.items.map((item) => (
-                  <tr key={item.id} className="border-outline-variant/30 border-b-[0.5px]">
-                    <td className="px-2 py-3">
-                      <p className="text-primary font-medium">{item.productName}</p>
-                      <p className="text-on-surface-variant text-[11px]">{item.categoryName}</p>
-                    </td>
-                    <td className="font-data-tabular px-2 py-3 text-right">
-                      {Number(item.quantity)} LTR
-                    </td>
-                    <td className="font-data-tabular px-2 py-3 text-right">
-                      {formatINR(item.price)}
-                    </td>
-                    <td className="font-data-tabular text-primary px-2 py-3 text-right font-semibold">
-                      {formatINR(item.lineTotal)}
-                    </td>
+            {previewLoading && !preview ? (
+              <p className="text-on-surface-variant text-body-sm">Resolving printed names...</p>
+            ) : (
+              <table className="w-full min-w-[700px] text-left">
+                <thead>
+                  <tr className="border-outline-variant border-b-[0.5px]">
+                    <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 uppercase">
+                      Product
+                    </th>
+                    <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 uppercase">
+                      Printed Name
+                    </th>
+                    <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
+                      Qty
+                    </th>
+                    <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
+                      Price
+                    </th>
+                    <th className="font-label-caps text-label-caps text-on-surface-variant px-2 pb-3 text-right uppercase">
+                      Total
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(preview?.items ?? []).map((item) => {
+                    const editedBaseName = editedNames[item.productId] ?? item.baseName;
+                    const resolvedPrintedName = computePrintedName(item, editedBaseName);
+                    const dispatchItem = entry.items.find((di) => di.productId === item.productId);
+                    return (
+                      <tr key={item.productId} className="border-outline-variant/30 border-b-[0.5px]">
+                        <td className="px-2 py-3">
+                          <p className="text-primary font-medium">{item.productName}</p>
+                          <p className="text-on-surface-variant text-[11px]">{item.lineName}</p>
+                          {item.taxClassMissingHsn && (
+                            <p className="mt-1 text-[11px] text-red-400">
+                              Tax class has no HSN code set — this item will block invoicing.
+                            </p>
+                          )}
+                          {item.priceIsZero && (
+                            <p className="mt-1 text-[11px] text-red-400">
+                              Price not set for this customer.
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-2 py-3">
+                          <input
+                            type="text"
+                            value={editedBaseName}
+                            onChange={(e) =>
+                              setEditedNames((prev) => ({
+                                ...prev,
+                                [item.productId]: e.target.value,
+                              }))
+                            }
+                            className="bg-surface-container-low border-outline-variant text-body-sm text-primary focus:border-secondary w-full rounded-lg border-[0.5px] p-2 outline-none"
+                          />
+                          {item.lineKind === 'INK' && (
+                            <p className="text-on-surface-variant mt-1 text-[11px]">
+                              {resolvedPrintedName}
+                            </p>
+                          )}
+                          <label className="text-on-surface-variant mt-1 flex items-center gap-1.5 text-[11px]">
+                            <input
+                              type="checkbox"
+                              checked={rememberFlags[item.productId] ?? false}
+                              onChange={(e) =>
+                                setRememberFlags((prev) => ({
+                                  ...prev,
+                                  [item.productId]: e.target.checked,
+                                }))
+                              }
+                            />
+                            Remember for this customer
+                          </label>
+                        </td>
+                        <td className="font-data-tabular px-2 py-3 text-right">
+                          {item.quantity} {item.unitName}
+                        </td>
+                        <td className="font-data-tabular px-2 py-3 text-right">
+                          {formatINR(item.price)}
+                        </td>
+                        <td className="font-data-tabular text-primary px-2 py-3 text-right font-semibold">
+                          {dispatchItem ? formatINR(dispatchItem.lineTotal) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
@@ -401,11 +554,18 @@ function CreateInvoiceContent() {
               </p>
             </div>
 
+            {hasBlockingItemIssue && (
+              <p className="mt-4 text-[11px] text-red-400">
+                One or more items have no price or no HSN code set — fix them before generating.
+              </p>
+            )}
+
             <div className="mt-8 flex flex-col gap-3">
               <button
                 type="button"
                 onClick={() => setShowConfirm(true)}
-                className="bg-primary text-on-primary font-body-md flex items-center justify-center gap-2 rounded-xl py-3.5 font-bold transition-all hover:opacity-90 active:scale-95"
+                disabled={hasBlockingItemIssue}
+                className="bg-primary text-on-primary font-body-md flex items-center justify-center gap-2 rounded-xl py-3.5 font-bold transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="material-symbols-outlined">receipt_long</span>
                 Generate Invoice

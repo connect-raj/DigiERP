@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LedgerView } from '../../../_components/LedgerView';
+import { showErrorToast } from '@/lib/toast';
 
 export default function CustomerLedgerPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -16,7 +17,10 @@ export default function CustomerLedgerPage({ params }: { params: Promise<{ id: s
       .then((res) => {
         if (res.data) setCustomerName(res.data.firmName);
       })
-      .catch((err) => console.error('Failed to load customer', err));
+      .catch((err) => {
+        console.error('Failed to load customer', err);
+        showErrorToast(err, 'Failed to load customer');
+      });
   }, [id]);
 
   return (

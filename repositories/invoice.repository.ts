@@ -44,7 +44,9 @@ function withDerivedBalance<
 export interface CreateInvoiceItemInput {
   productId: string;
   productName: string;
-  categoryName: string;
+  lineId: string;
+  lineName: string;
+  printedName: string;
   hsnCode: string;
   unit: string;
   quantity: number;
@@ -53,6 +55,10 @@ export interface CreateInvoiceItemInput {
   sgst: number;
   igst: number;
   lineTotal: number;
+  /** Per-item printed-name override supplied on this invoice's request, if any. */
+  printedNameOverride?: string;
+  /** When true (and printedNameOverride is set), persist it as the customer's line invoice name. */
+  rememberForCustomer?: boolean;
 }
 
 export interface CreateInvoiceData {
@@ -157,19 +163,43 @@ export class InvoiceRepository {
   }
 
   async findDispatchEntryForInvoicing(dispatchEntryId: string) {
-    return prisma.dispatchEntry.findUnique({
+    const entry = await prisma.dispatchEntry.findUnique({
       where: { id: dispatchEntryId },
       include: {
         customer: true,
         items: {
           include: {
             product: {
-              include: { category: true },
+              include: {
+                line: { include: { taxClass: true } },
+                taxClass: true,
+                unit: true,
+                colour: true,
+              },
             },
           },
         },
       },
     });
+    if (!entry) return null;
+
+    // Fetch the customer's printed-name override for every distinct line among the items,
+    // in one extra query, and map it onto each item for O(1) lookup at resolution time.
+    const lineIds = [...new Set(entry.items.map((item) => item.product.lineId))];
+    const customerLineNames = lineIds.length
+      ? await prisma.customerLineInvoiceName.findMany({
+          where: { customerId: entry.customerId, lineId: { in: lineIds } },
+        })
+      : [];
+    const customerLineNameByLineId = new Map(customerLineNames.map((c) => [c.lineId, c.name]));
+
+    return {
+      ...entry,
+      items: entry.items.map((item) => ({
+        ...item,
+        customerLineInvoiceName: customerLineNameByLineId.get(item.product.lineId) ?? null,
+      })),
+    };
   }
 
   async findSettings() {
@@ -196,7 +226,8 @@ export class InvoiceRepository {
           },
           items: data.items.map((item) => ({
             productName: item.productName,
-            categoryName: item.categoryName,
+            lineName: item.lineName,
+            printedName: item.printedName,
             hsnCode: item.hsnCode,
             quantity: item.quantity,
             unit: item.unit,
@@ -257,6 +288,24 @@ export class InvoiceRepository {
           where: { id: data.dispatchEntryId },
           data: { status: 'BILLED' },
         });
+
+        // "Remember for this customer" — persist the printed-name override onto
+        // CustomerLineInvoiceName for the item's line, inside the same transaction.
+        for (const item of data.items) {
+          if (item.rememberForCustomer && item.printedNameOverride) {
+            await tx.customerLineInvoiceName.upsert({
+              where: {
+                customerId_lineId: { customerId: data.customerId, lineId: item.lineId },
+              },
+              create: {
+                customerId: data.customerId,
+                lineId: item.lineId,
+                name: item.printedNameOverride,
+              },
+              update: { name: item.printedNameOverride },
+            });
+          }
+        }
 
         // No stored balance to bump — customer.pendingTotal is derived from ACTIVE invoices/payments.
 

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SalesChart from './_components/dashboard/SalesChart';
-import TopCategoryChart from './_components/dashboard/TopCategoryChart';
+import TopProductLineChart from './_components/dashboard/TopProductLineChart';
 import LowStockAlerts from './_components/dashboard/LowStockAlerts';
 import ReceivablesAging from './_components/dashboard/ReceivablesAging';
 import EmptyState from './_components/dashboard/EmptyState';
@@ -239,7 +239,7 @@ export default function DashboardPage() {
               <Card title="Sales Trend" icon="show_chart">
                 <ChartSkeleton />
               </Card>
-              <Card title="Top Categories" icon="bar_chart">
+              <Card title="Top Product Lines" icon="bar_chart">
                 <ChartSkeleton />
               </Card>
             </div>
@@ -318,8 +318,8 @@ export default function DashboardPage() {
             <Card title="Sales Trend" icon="show_chart">
               <SalesChart data={dashboard.salesChart} period={period} />
             </Card>
-            <Card title="Top Categories" icon="bar_chart">
-              <TopCategoryChart data={dashboard.topCategoryChart} />
+            <Card title="Top Product Lines" icon="bar_chart">
+              <TopProductLineChart data={dashboard.topLineChart} />
             </Card>
           </div>
 

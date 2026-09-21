@@ -80,7 +80,9 @@ export class DispatchEntryRepository {
         customer: { select: { id: true, firmName: true, state: true, gstin: true } },
         items: {
           include: {
-            product: { select: { name: true, category: { select: { name: true } } } },
+            product: {
+              select: { name: true, line: { select: { id: true, name: true, kind: true } } },
+            },
           },
         },
         invoice: {
@@ -129,7 +131,6 @@ export class DispatchEntryRepository {
   async findProductsByIds(productIds: string[]) {
     return prisma.product.findMany({
       where: { id: { in: productIds } },
-      include: { category: true },
     });
   }
 
