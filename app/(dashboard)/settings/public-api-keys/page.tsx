@@ -99,9 +99,9 @@ export default function PublicApiKeysPage() {
       <div className="mb-8">
         <h1 className="font-display text-2xl font-semibold tracking-tight">Public API Keys</h1>
         <p className="text-on-surface-variant mt-1 text-[13px]">
-          Keys for the marketing site&apos;s read-only API (gallery, and anything else exposed
-          under /api/public/*). Revoke a key here if it&apos;s compromised; the raw key is shown
-          only once, at creation.
+          Keys for the marketing site&apos;s read-only API (gallery, and anything else exposed under
+          /api/public/*). Revoke a key here if it&apos;s compromised; the raw key is shown only
+          once, at creation.
         </p>
       </div>
 
@@ -166,13 +166,19 @@ export default function PublicApiKeysPage() {
           <tbody className="divide-y-[0.5px] divide-[#333]">
             {loading ? (
               <tr>
-                <td colSpan={3} className="text-on-surface-variant px-5 py-8 text-center text-[13px]">
+                <td
+                  colSpan={3}
+                  className="text-on-surface-variant px-5 py-8 text-center text-[13px]"
+                >
                   Loading…
                 </td>
               </tr>
             ) : apiKeys.length === 0 ? (
               <tr>
-                <td colSpan={3} className="text-on-surface-variant px-5 py-8 text-center text-[13px]">
+                <td
+                  colSpan={3}
+                  className="text-on-surface-variant px-5 py-8 text-center text-[13px]"
+                >
                   No public API keys yet.
                 </td>
               </tr>

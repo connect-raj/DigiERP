@@ -15,10 +15,12 @@ vi.mock('cloudinary', () => ({
 }));
 
 function fakeUploadStream(result: Record<string, unknown> | null, error: unknown = null) {
-  uploadStreamMock.mockImplementation((_options: unknown, callback: (...cbArgs: unknown[]) => void) => {
-    callback(error, result);
-    return { end: vi.fn() };
-  });
+  uploadStreamMock.mockImplementation(
+    (_options: unknown, callback: (...cbArgs: unknown[]) => void) => {
+      callback(error, result);
+      return { end: vi.fn() };
+    }
+  );
 }
 
 describe('uploadMediaAsset', () => {

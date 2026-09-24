@@ -115,9 +115,7 @@ export default function GalleryApplicationTypesPage() {
       >
         <div className="flex items-end gap-3">
           <div className="flex-1">
-            <label className="text-on-surface-variant mb-1.5 block text-xs font-medium">
-              Name
-            </label>
+            <label className="text-on-surface-variant mb-1.5 block text-xs font-medium">Name</label>
             <TextInput
               value={name}
               onChange={(e) => setName(e.target.value)}

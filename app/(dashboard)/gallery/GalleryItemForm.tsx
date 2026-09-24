@@ -209,11 +209,7 @@ export default function GalleryItemForm({ itemId }: { itemId?: string }) {
                 placeholder="e.g. Storefront signage installation"
               />
             </FormField>
-            <FormField
-              label="Application Type"
-              required
-              error={errors.applicationTypeId}
-            >
+            <FormField label="Application Type" required error={errors.applicationTypeId}>
               <SelectInput
                 value={applicationTypeId}
                 invalid={!!errors.applicationTypeId}
