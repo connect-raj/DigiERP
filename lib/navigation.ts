@@ -48,6 +48,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Customer Ledger', href: '/ledger', icon: 'menu_book' },
     ],
   },
+  {
+    label: 'Website',
+    items: [
+      { label: 'Gallery', href: '/gallery', icon: 'photo_library' },
+      { label: 'Media Library', href: '/media', icon: 'perm_media' },
+    ],
+  },
 ];
 
 export const SETTINGS_ITEM: NavItem = { label: 'Settings', href: '/settings', icon: 'settings' };
@@ -56,6 +63,7 @@ export const SETTINGS_ITEM: NavItem = { label: 'Settings', href: '/settings', ic
 const SEGMENT_LABELS: Record<string, string> = {
   new: 'New',
   ledger: 'Ledger',
+  'application-types': 'Application Types',
 };
 
 function titleCase(segment: string) {
