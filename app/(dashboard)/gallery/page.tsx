@@ -86,6 +86,7 @@ export default function GalleryPage() {
   }, [search, applicationTypeId, publishedFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchItems();
   }, [fetchItems]);
 

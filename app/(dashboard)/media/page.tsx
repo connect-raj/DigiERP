@@ -72,7 +72,7 @@ export default function MediaLibraryPage() {
   }, [search]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAssets();
   }, [search, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
