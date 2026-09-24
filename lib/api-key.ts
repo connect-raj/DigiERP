@@ -40,3 +40,25 @@ export async function verifyIngestionApiKey(
 
   return { source: apiKey.source, apiKeyId: apiKey.id };
 }
+
+/**
+ * Verifies a public (read-scoped) API key for the marketing-site-facing
+ * routes under app/api/public/*. Separate model from IngestionApiKey (see
+ * PublicApiKey in schema.prisma) — this is a read credential, not scoped to
+ * an inquiry source.
+ */
+export async function verifyPublicApiKey(rawKey: string | null): Promise<{ apiKeyId: string }> {
+  if (!rawKey) {
+    throw new UnauthorizedError('Unauthorized: Missing API key');
+  }
+
+  const apiKey = await prisma.publicApiKey.findUnique({
+    where: { keyHash: hashApiKey(rawKey) },
+  });
+
+  if (!apiKey || !apiKey.active) {
+    throw new UnauthorizedError('Unauthorized: Invalid or inactive API key');
+  }
+
+  return { apiKeyId: apiKey.id };
+}

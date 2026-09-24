@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { hashApiKey, generateRawApiKey, verifyIngestionApiKey } from './api-key';
+import { hashApiKey, generateRawApiKey, verifyIngestionApiKey, verifyPublicApiKey } from './api-key';
 import prisma from '@/lib/prisma';
 import { UnauthorizedError } from '@/lib/errors';
 
 vi.mock('@/lib/prisma', () => ({
   default: {
     ingestionApiKey: {
+      findUnique: vi.fn(),
+    },
+    publicApiKey: {
       findUnique: vi.fn(),
     },
   },
@@ -73,3 +76,47 @@ describe('verifyIngestionApiKey', () => {
     });
   });
 });
+
+describe('verifyPublicApiKey', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('throws Unauthorized when no key is provided', async () => {
+    await expect(verifyPublicApiKey(null)).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('throws Unauthorized when the key hash matches no record', async () => {
+    vi.mocked(prisma.publicApiKey.findUnique).mockResolvedValue(null);
+    await expect(verifyPublicApiKey('bad-key')).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('throws Unauthorized when the matched key is inactive', async () => {
+    vi.mocked(prisma.publicApiKey.findUnique).mockResolvedValue({
+      id: 'key-1',
+      label: 'Marketing site',
+      keyHash: hashApiKey('revoked-key'),
+      active: false,
+      createdAt: new Date(),
+    } as never);
+    await expect(verifyPublicApiKey('revoked-key')).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('returns the apiKeyId for a valid, active key, looked up by hash', async () => {
+    vi.mocked(prisma.publicApiKey.findUnique).mockResolvedValue({
+      id: 'key-1',
+      label: 'Marketing site',
+      keyHash: hashApiKey('good-key'),
+      active: true,
+      createdAt: new Date(),
+    } as never);
+
+    const result = await verifyPublicApiKey('good-key');
+
+    expect(result).toEqual({ apiKeyId: 'key-1' });
+    expect(prisma.publicApiKey.findUnique).toHaveBeenCalledWith({
+      where: { keyHash: hashApiKey('good-key') },
+    });
+  });
+});
+
