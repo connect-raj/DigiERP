@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const SOURCES = ['WEBSITE', 'EXPO', 'INDIAMART', 'TRADEINDIA', 'MANUAL'] as const;
 
@@ -20,6 +21,7 @@ export default function IngestionKeysPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newRawKey, setNewRawKey] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const fetchApiKeys = async () => {
     try {
@@ -29,6 +31,7 @@ export default function IngestionKeysPage() {
       if (data.data) setApiKeys(data.data);
     } catch (error) {
       console.error('Failed to fetch ingestion API keys', error);
+      showErrorToast(error, 'Failed to load ingestion keys');
     } finally {
       setLoading(false);
     }
@@ -52,14 +55,17 @@ export default function IngestionKeysPage() {
       const data = await res.json();
       if (!res.ok) {
         setFormError(data.error?.message ?? 'Failed to create key');
+        showErrorToast(data, 'Failed to create key');
         return;
       }
       setNewRawKey(data.data.rawKey);
       setLabel('');
+      showSuccessToast('Ingestion key created');
       fetchApiKeys();
     } catch (error) {
       console.error('Failed to create ingestion API key', error);
       setFormError('An unexpected error occurred.');
+      showErrorToast(error, 'Failed to create ingestion key');
     } finally {
       setIsSubmitting(false);
     }
@@ -67,14 +73,24 @@ export default function IngestionKeysPage() {
 
   const handleToggleActive = async (apiKey: ApiKey) => {
     try {
+      setTogglingId(apiKey.id);
       const res = await fetch(`/api/ingestion-api-keys/${apiKey.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !apiKey.active }),
       });
-      if (res.ok) fetchApiKeys();
+      const data = await res.json();
+      if (!res.ok) {
+        showErrorToast(data, 'Failed to update ingestion key');
+        return;
+      }
+      showSuccessToast(apiKey.active ? 'Ingestion key revoked' : 'Ingestion key reactivated');
+      fetchApiKeys();
     } catch (error) {
       console.error('Failed to update ingestion API key', error);
+      showErrorToast(error, 'Failed to update ingestion key');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -206,9 +222,14 @@ export default function IngestionKeysPage() {
                   <td className="px-5 py-3 text-right">
                     <button
                       onClick={() => handleToggleActive(apiKey)}
-                      className="text-on-surface-variant hover:text-primary text-[12px] underline"
+                      disabled={togglingId === apiKey.id}
+                      className="text-on-surface-variant hover:text-primary text-[12px] underline disabled:opacity-50"
                     >
-                      {apiKey.active ? 'Revoke' : 'Reactivate'}
+                      {togglingId === apiKey.id
+                        ? 'Working…'
+                        : apiKey.active
+                          ? 'Revoke'
+                          : 'Reactivate'}
                     </button>
                   </td>
                 </tr>

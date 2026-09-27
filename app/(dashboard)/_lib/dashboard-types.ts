@@ -5,9 +5,9 @@ export interface SalesChartPoint {
   amount: number;
 }
 
-export interface TopCategoryPoint {
-  categoryId: string;
-  categoryName: string;
+export interface TopLinePoint {
+  lineId: string;
+  lineName: string;
   amount: number;
 }
 
@@ -22,8 +22,8 @@ export interface LowStockProduct {
   productName: string;
   currentStock: number;
   lowerStockLimit: number;
-  categoryId: string;
-  categoryName: string;
+  lineId: string;
+  lineName: string;
 }
 
 export interface BreachedCustomer {
@@ -65,7 +65,7 @@ export interface DashboardResponse {
   onAccountCredit: number;
   receivablesAging: ReceivablesAging;
   salesChart: SalesChartPoint[];
-  topCategoryChart: TopCategoryPoint[];
+  topLineChart: TopLinePoint[];
   lowStock: LowStockProduct[];
   creditHealth: { totalOutstanding: number; breachedCustomers: BreachedCustomer[] };
   recentActivity: ActivityItem[];

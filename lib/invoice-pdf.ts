@@ -32,7 +32,9 @@ export interface InvoiceSnapshotDispatchReference {
 
 export interface InvoiceSnapshotItem {
   productName: string;
-  categoryName: string;
+  lineName: string;
+  /** Resolved display name; falls back to productName if missing (older snapshots). */
+  printedName?: string;
   hsnCode: string;
   quantity: number;
   unit: string;
@@ -265,7 +267,7 @@ function buildInvoiceDocument(snapshot: InvoiceSnapshot) {
             React.createElement(
               Text,
               { style: [styles.cell, styles.cellProduct] },
-              `${item.productName} (${item.categoryName})`
+              item.printedName ?? item.productName
             ),
             React.createElement(Text, { style: [styles.cell, styles.cellHsn] }, item.hsnCode),
             React.createElement(

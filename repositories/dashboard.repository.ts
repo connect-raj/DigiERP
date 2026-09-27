@@ -59,7 +59,7 @@ export class DashboardRepository {
     }));
   }
 
-  async findTopCategorySalesInRange(range: PeriodRange) {
+  async findTopProductLineSalesInRange(range: PeriodRange) {
     const grouped = await prisma.invoiceItem.groupBy({
       by: ['productId'],
       where: { invoice: { date: { gte: range.start, lt: range.end } } },
@@ -70,31 +70,28 @@ export class DashboardRepository {
 
     const products = await prisma.product.findMany({
       where: { id: { in: grouped.map((g) => g.productId) } },
-      select: { id: true, category: { select: { id: true, name: true } } },
+      select: { id: true, line: { select: { id: true, name: true } } },
     });
-    const categoryByProductId = new Map(products.map((p) => [p.id, p.category]));
+    const lineByProductId = new Map(products.map((p) => [p.id, p.line]));
 
-    const byCategory = new Map<
-      string,
-      { categoryId: string; categoryName: string; amount: number }
-    >();
+    const byLine = new Map<string, { lineId: string; lineName: string; amount: number }>();
     for (const g of grouped) {
-      const category = categoryByProductId.get(g.productId);
-      if (!category) continue;
+      const line = lineByProductId.get(g.productId);
+      if (!line) continue;
       const amount = Number(g._sum.lineTotal ?? 0);
-      const existing = byCategory.get(category.id);
+      const existing = byLine.get(line.id);
       if (existing) {
         existing.amount += amount;
       } else {
-        byCategory.set(category.id, {
-          categoryId: category.id,
-          categoryName: category.name,
+        byLine.set(line.id, {
+          lineId: line.id,
+          lineName: line.name,
           amount,
         });
       }
     }
 
-    return [...byCategory.values()].sort((a, b) => b.amount - a.amount);
+    return [...byLine.values()].sort((a, b) => b.amount - a.amount);
   }
 
   async findActiveProducts() {
@@ -105,7 +102,7 @@ export class DashboardRepository {
         name: true,
         currentStock: true,
         lowerStockLimit: true,
-        category: { select: { id: true, name: true } },
+        line: { select: { id: true, name: true } },
       },
     });
   }

@@ -7,6 +7,7 @@ import { RegistrationMark } from '@/components/ui/RegistrationMark';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type VendorProduct = {
   id: string;
@@ -16,7 +17,7 @@ type VendorProduct = {
     id: string;
     name: string;
     unit: string;
-    category: { name: string } | null;
+    line: { id: string; name: string } | null;
   };
 };
 
@@ -47,6 +48,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
   const [linkProductId, setLinkProductId] = useState('');
   const [linkPreferred, setLinkPreferred] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [purchaseCount, setPurchaseCount] = useState<number | null>(null);
 
   const fetchVendor = async () => {
@@ -62,6 +64,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
     } catch (err) {
       console.error('Failed to load vendor', err);
       setError('Failed to load vendor');
+      showErrorToast(err, 'Failed to load vendor');
     } finally {
       setLoading(false);
     }
@@ -87,14 +90,20 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
           );
         }
       })
-      .catch((err) => console.error('Failed to fetch products', err));
+      .catch((err) => {
+        console.error('Failed to fetch products', err);
+        showErrorToast(err, 'Failed to load products');
+      });
   }, []);
 
   useEffect(() => {
     fetch(`/api/purchases?vendorId=${id}&limit=1`)
       .then((res) => res.json())
       .then((data) => setPurchaseCount(data.pagination?.total ?? 0))
-      .catch((err) => console.error('Failed to fetch purchase count', err));
+      .catch((err) => {
+        console.error('Failed to fetch purchase count', err);
+        showErrorToast(err, 'Failed to load purchase count');
+      });
   }, [id]);
 
   const handleLink = async () => {
@@ -110,15 +119,16 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
       });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to link product');
+        showErrorToast(data, 'Failed to link product');
         return;
       }
       setLinkProductId('');
       setLinkPreferred(false);
+      showSuccessToast('Product linked');
       fetchVendor();
     } catch (err) {
       console.error('Failed to link product', err);
-      window.alert('Failed to link product');
+      showErrorToast(err, 'Failed to link product');
     } finally {
       setSaving(false);
     }
@@ -127,16 +137,20 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
   const handleUnlink = async (productId: string) => {
     if (!window.confirm('Unlink this product from the vendor?')) return;
     try {
+      setUnlinkingId(productId);
       const res = await fetch(`/api/vendors/${id}/products/${productId}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error?.message ?? 'Failed to unlink product');
+        showErrorToast(data, 'Failed to unlink product');
         return;
       }
+      showSuccessToast('Product unlinked');
       fetchVendor();
     } catch (err) {
       console.error('Failed to unlink product', err);
-      window.alert('Failed to unlink product');
+      showErrorToast(err, 'Failed to unlink product');
+    } finally {
+      setUnlinkingId(null);
     }
   };
 
@@ -262,7 +276,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                 <thead>
                   <tr className="bg-surface-container-high text-on-surface-variant border-border border-b text-[11px] font-medium tracking-widest uppercase">
                     <th className="px-5 py-3">Product</th>
-                    <th className="px-5 py-3">Category</th>
+                    <th className="px-5 py-3">Product Line</th>
                     <th className="px-5 py-3">Preferred</th>
                     <th className="px-5 py-3"></th>
                   </tr>
@@ -272,7 +286,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                     <tr key={vp.id} className="hover:bg-surface-container transition-colors">
                       <td className="text-on-surface px-5 py-3 font-medium">{vp.product.name}</td>
                       <td className="text-on-surface-variant px-5 py-3 text-[13px]">
-                        {vp.product.category?.name || '—'}
+                        {vp.product.line?.name || '—'}
                       </td>
                       <td className="px-5 py-3">
                         {vp.isPreferred ? (
@@ -286,7 +300,8 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                       <td className="px-5 py-3 text-right">
                         <button
                           onClick={() => handleUnlink(vp.productId)}
-                          className="text-on-surface-variant hover:text-status-error rounded p-1"
+                          disabled={unlinkingId === vp.productId}
+                          className="text-on-surface-variant hover:text-status-error rounded p-1 disabled:opacity-50"
                           title="Unlink"
                         >
                           <span className="material-symbols-outlined text-[18px]">link_off</span>

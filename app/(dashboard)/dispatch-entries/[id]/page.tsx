@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { StatusPill, type Status } from '@/components/ui/StatusPill';
 import { RegistrationMark } from '@/components/ui/RegistrationMark';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type StockTransaction = {
   id: string;
@@ -23,7 +24,7 @@ type DispatchEntryItem = {
   id: string;
   productId: string;
   productName: string;
-  categoryName: string;
+  lineName: string;
   quantity: string | number;
   price: string | number;
   lineTotal: string | number;
@@ -126,6 +127,7 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
     } catch (err) {
       console.error('Failed to load dispatch details', err);
       setError('Failed to load dispatch entry.');
+      showErrorToast(err, 'Failed to load dispatch entry');
     } finally {
       setLoading(false);
     }
@@ -142,14 +144,15 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
       const res = await fetch(`/api/dispatch-entries/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error?.message || 'Failed to cancel dispatch entry');
+        showErrorToast(data, 'Failed to cancel dispatch entry');
       } else {
+        showSuccessToast('Dispatch entry cancelled');
         setIsCancelModalOpen(false);
         fetchDetails();
       }
     } catch (err) {
       console.error('Error cancelling entry', err);
-      alert('An unexpected error occurred.');
+      showErrorToast(err, 'An unexpected error occurred.');
     } finally {
       setCancelling(false);
     }
@@ -393,7 +396,7 @@ export default function DispatchEntryDetailPage({ params }: { params: Promise<{ 
                 <tr key={item.id}>
                   <td className="px-5 py-3">
                     <span className="text-on-surface block font-medium">{item.productName}</span>
-                    <span className="text-on-surface-variant text-xs">{item.categoryName}</span>
+                    <span className="text-on-surface-variant text-xs">{item.lineName}</span>
                   </td>
                   <td className="px-5 py-3 text-right font-mono">{Number(item.quantity)}</td>
                   <td className="px-5 py-3 text-right font-mono">{formatINR(item.price)}</td>

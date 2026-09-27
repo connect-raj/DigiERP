@@ -21,6 +21,17 @@ export const setCustomerPriceSchema = z.object({
   price: z.number().nonnegative('Price must be >= 0'),
 });
 
+export const createCustomerLineInvoiceNameSchema = z.object({
+  lineId: z.string().uuid('Invalid product line ID'),
+  name: z.string().min(1, 'Name is required'),
+});
+
+export const updateCustomerLineInvoiceNameSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+});
+
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
 export type SetCustomerPriceInput = z.infer<typeof setCustomerPriceSchema>;
+export type CreateCustomerLineInvoiceNameInput = z.infer<typeof createCustomerLineInvoiceNameSchema>;
+export type UpdateCustomerLineInvoiceNameInput = z.infer<typeof updateCustomerLineInvoiceNameSchema>;

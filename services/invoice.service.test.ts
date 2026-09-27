@@ -48,10 +48,22 @@ const baseDispatchEntry = {
       productId: 'prod-1',
       quantity: 10,
       price: 100,
+      customerLineInvoiceName: null,
       product: {
         name: 'Ink Red',
-        unit: 'LTR',
-        category: { name: 'Ink', hsnCode: '3215', gstRate: 18 },
+        lineId: 'line-1',
+        packSize: 1,
+        unit: { name: 'LTR' },
+        colour: { name: 'Red' },
+        taxClassId: null,
+        taxClass: null,
+        line: {
+          id: 'line-1',
+          kind: 'INK',
+          name: 'Premium UV Ink',
+          invoiceName: null,
+          taxClass: { name: 'Ink', hsnCode: '3215', gstRate: 18 },
+        },
       },
     },
   ],
@@ -144,6 +156,234 @@ describe('InvoiceService', () => {
       expect(callArg.items[0].igst).toBeCloseTo(180);
       expect(callArg.items[0].cgst).toBe(0);
       expect(callArg.items[0].sgst).toBe(0);
+    });
+  });
+
+  describe('create — PRICE_NOT_SET guard', () => {
+    it('throws BadRequestError with PRICE_NOT_SET when the stored price is 0', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue({
+        ...baseDispatchEntry,
+        items: [{ ...baseDispatchEntry.items[0], price: 0 }],
+      } as never);
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+
+      await expect(invoiceService.create(input)).rejects.toMatchObject({ code: 'PRICE_NOT_SET' });
+      await expect(invoiceService.create(input)).rejects.toBeInstanceOf(BadRequestError);
+    });
+
+    it('succeeds when the stored price is non-zero', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        baseDispatchEntry as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      vi.spyOn(invoiceRepository, 'createInvoiceTx').mockResolvedValue({ id: 'inv-1' } as never);
+
+      await expect(invoiceService.create(input)).resolves.toEqual({ id: 'inv-1' });
+    });
+  });
+
+  describe('create — null-HSN block', () => {
+    it('throws BadRequestError with TAX_CLASS_MISSING_HSN when the effective tax class has no HSN code', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue({
+        ...baseDispatchEntry,
+        items: [
+          {
+            ...baseDispatchEntry.items[0],
+            product: {
+              ...baseDispatchEntry.items[0].product,
+              line: {
+                ...baseDispatchEntry.items[0].product.line,
+                taxClass: { name: 'Ink', hsnCode: null, gstRate: 18 },
+              },
+            },
+          },
+        ],
+      } as never);
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+
+      await expect(invoiceService.create(input)).rejects.toMatchObject({
+        code: 'TAX_CLASS_MISSING_HSN',
+      });
+      await expect(invoiceService.create(input)).rejects.toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('printed-name resolution', () => {
+    function inkDispatchEntry(overrides: {
+      requestOverride?: string;
+      customerLineInvoiceName?: string | null;
+      lineInvoiceName?: string | null;
+    }) {
+      return {
+        ...baseDispatchEntry,
+        items: [
+          {
+            ...baseDispatchEntry.items[0],
+            customerLineInvoiceName: overrides.customerLineInvoiceName ?? null,
+            product: {
+              ...baseDispatchEntry.items[0].product,
+              line: {
+                ...baseDispatchEntry.items[0].product.line,
+                invoiceName: overrides.lineInvoiceName ?? null,
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    it('INK: uses the request-level printedNameOverride first, over customer and line names', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        inkDispatchEntry({
+          customerLineInvoiceName: 'Customer Override',
+          lineInvoiceName: 'Line Invoice Name',
+        }) as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create({
+        dispatchEntryId: 'de-1',
+        items: [{ productId: 'prod-1', printedNameOverride: 'Request Override' }],
+      });
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe('Request Override – Red – 1 LTR');
+    });
+
+    it('INK: falls back to the remembered customer override when no request override is given', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        inkDispatchEntry({
+          customerLineInvoiceName: 'Customer Override',
+          lineInvoiceName: 'Line Invoice Name',
+        }) as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe(
+        'Customer Override – Red – 1 LTR'
+      );
+    });
+
+    it("INK: falls back to the line's invoiceName when no override exists", async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        inkDispatchEntry({ lineInvoiceName: 'Line Invoice Name' }) as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe(
+        'Line Invoice Name – Red – 1 LTR'
+      );
+    });
+
+    it("INK: falls back to the line's name when neither override nor invoiceName exists", async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        inkDispatchEntry({}) as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe(
+        'Premium UV Ink – Red – 1 LTR'
+      );
+    });
+
+    it('INK: omits the colour segment (no stray dash) for a colourless line, e.g. Flush', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue({
+        ...baseDispatchEntry,
+        items: [
+          {
+            ...baseDispatchEntry.items[0],
+            customerLineInvoiceName: null,
+            product: {
+              ...baseDispatchEntry.items[0].product,
+              colour: null,
+              line: {
+                ...baseDispatchEntry.items[0].product.line,
+                name: 'Solvent Flush',
+                invoiceName: null,
+              },
+            },
+          },
+        ],
+      } as never);
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe('Solvent Flush – 1 LTR');
+    });
+
+    function nonInkDispatchEntry(
+      kind: 'MACHINE' | 'SPARE_PART',
+      overrides: { customerLineInvoiceName?: string | null; lineInvoiceName?: string | null }
+    ) {
+      return {
+        ...baseDispatchEntry,
+        items: [
+          {
+            ...baseDispatchEntry.items[0],
+            customerLineInvoiceName: overrides.customerLineInvoiceName ?? null,
+            product: {
+              ...baseDispatchEntry.items[0].product,
+              name: 'Konica 512i Head',
+              packSize: null,
+              colour: null,
+              line: {
+                ...baseDispatchEntry.items[0].product.line,
+                kind,
+                invoiceName: overrides.lineInvoiceName ?? null,
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    it('MACHINE: uses the customer/line override when set', async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        nonInkDispatchEntry('MACHINE', { customerLineInvoiceName: 'Custom Machine Name' }) as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe('Custom Machine Name');
+    });
+
+    it("MACHINE/SPARE_PART: falls back to the product's own name when no override exists", async () => {
+      vi.spyOn(invoiceRepository, 'findDispatchEntryForInvoicing').mockResolvedValue(
+        nonInkDispatchEntry('SPARE_PART', {}) as never
+      );
+      vi.spyOn(invoiceRepository, 'findSettings').mockResolvedValue(gujaratSettings as never);
+      const createSpy = vi
+        .spyOn(invoiceRepository, 'createInvoiceTx')
+        .mockResolvedValue({ id: 'inv-1' } as never);
+
+      await invoiceService.create(input);
+
+      expect(createSpy.mock.calls[0][0].items[0].printedName).toBe('Konica 512i Head');
     });
   });
 

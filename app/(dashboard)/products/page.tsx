@@ -10,29 +10,63 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListToolbar, FilterSelect } from '@/components/ui/ListToolbar';
 import { FormField, SelectInput, SubmitError, TextInput } from '@/components/ui/form';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 const PAGE_LIMIT = 20;
+
+type Kind = 'INK' | 'MACHINE' | 'SPARE_PART';
+
+const KIND_LABEL: Record<Kind, string> = {
+  INK: 'Ink',
+  MACHINE: 'Machine',
+  SPARE_PART: 'Spare Part',
+};
+
+type LineOption = {
+  id: string;
+  name: string;
+  kind: Kind;
+  role: { usesColours: boolean } | null;
+  colourSet: { colours: { colourId: string; colour: { id: string; name: string } }[] } | null;
+};
+
+type UnitOption = { id: string; name: string; appliesTo: Kind[] };
 
 type Product = {
   id: string;
   name: string;
-  sku: string;
-  categoryId: string | null;
-  category?: { name: string };
-  basePrice: number;
-  unit: string;
-  currentStock: number;
-  lowerStockLimit: number;
+  lineId: string;
+  line: { id: string; name: string; kind: Kind };
+  unitId: string;
+  unit: { id: string; name: string };
+  packSize: string | number | null;
+  colourId: string | null;
+  basePrice: string | number;
+  currentStock: string | number;
+  lowerStockLimit: string | number;
   isActive: boolean;
 };
+
+function generateInkName(
+  lineName: string,
+  colourName: string | undefined,
+  packSize: string,
+  unitName: string | undefined
+): string {
+  const parts = [lineName];
+  if (colourName) parts.push(colourName);
+  if (packSize.trim() && unitName) parts.push(`${packSize.trim()} ${unitName}`);
+  return parts.join(' – ');
+}
 
 export default function ProductsPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [lines, setLines] = useState<LineOption[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [lineFilterId, setLineFilterId] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
@@ -41,23 +75,49 @@ export default function ProductsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [lineSearch, setLineSearch] = useState('');
   const [formData, setFormData] = useState({
+    lineId: '',
     name: '',
-    categoryId: '',
-    basePrice: '',
-    unit: 'LTR',
+    unitId: '',
+    packSize: '',
+    colourId: '',
+    basePrice: '0',
     lowerStockLimit: '10',
     isActive: true,
   });
 
-  const fetchCategories = async () => {
+  const emptyFormData = {
+    lineId: '',
+    name: '',
+    unitId: '',
+    packSize: '',
+    colourId: '',
+    basePrice: '0',
+    lowerStockLimit: '10',
+    isActive: true,
+  };
+
+  const fetchLines = async () => {
     try {
-      // Category dropdown needs the full list, not a paginated page.
-      const res = await fetch('/api/categories?limit=1000');
+      // Line dropdown needs the full active list, not a paginated page.
+      const res = await fetch('/api/product-lines?limit=1000&isActive=true');
       const data = await res.json();
-      if (data.data) setCategories(data.data);
+      if (data.data) setLines(data.data);
     } catch (error) {
-      console.error('Failed to fetch categories', error);
+      console.error('Failed to fetch product lines', error);
+      showErrorToast(error, 'Failed to load product lines');
+    }
+  };
+
+  const fetchUnits = async () => {
+    try {
+      const res = await fetch('/api/units?limit=1000&isActive=true');
+      const data = await res.json();
+      if (data.data) setUnits(data.data);
+    } catch (error) {
+      console.error('Failed to fetch units', error);
+      showErrorToast(error, 'Failed to load units');
     }
   };
 
@@ -66,7 +126,7 @@ export default function ProductsPage() {
       setLoading(true);
       const url = new URL('/api/products', window.location.origin);
       if (search) url.searchParams.append('search', search);
-      if (categoryId) url.searchParams.append('categoryId', categoryId);
+      if (lineFilterId) url.searchParams.append('lineId', lineFilterId);
       url.searchParams.append('page', String(page));
       url.searchParams.append('limit', String(PAGE_LIMIT));
 
@@ -82,6 +142,7 @@ export default function ProductsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch products', error);
+      showErrorToast(error, 'Failed to load products');
     } finally {
       setLoading(false);
     }
@@ -89,39 +150,94 @@ export default function ProductsPage() {
 
   const openEditModal = (product: Product) => {
     setFormData({
+      lineId: product.lineId,
       name: product.name,
-      categoryId: product.categoryId || '',
+      unitId: product.unitId,
+      packSize: product.packSize !== null ? product.packSize.toString() : '',
+      colourId: product.colourId ?? '',
       basePrice: product.basePrice.toString(),
-      unit: product.unit,
       lowerStockLimit: product.lowerStockLimit.toString(),
       isActive: product.isActive,
     });
     setEditingId(product.id);
     setErrors({});
     setSubmitError(null);
+    setLineSearch('');
     setIsModalOpen(true);
   };
 
   const openCreateModal = () => {
-    setFormData({
-      name: '',
-      categoryId: '',
-      basePrice: '',
-      unit: 'LTR',
-      lowerStockLimit: '10',
-      isActive: true,
-    });
+    setFormData(emptyFormData);
     setEditingId(null);
     setErrors({});
     setSubmitError(null);
+    setLineSearch('');
     setIsModalOpen(true);
+  };
+
+  const selectedLine = useMemo(
+    () => lines.find((l) => l.id === formData.lineId),
+    [lines, formData.lineId]
+  );
+  const kind = selectedLine?.kind;
+  const usesColours = kind === 'INK' && !!selectedLine?.role?.usesColours;
+  const colourOptions = selectedLine?.colourSet?.colours ?? [];
+  const unitsForKind = useMemo(
+    () => (kind ? units.filter((u) => u.appliesTo.includes(kind)) : []),
+    [units, kind]
+  );
+  const selectedUnit = units.find((u) => u.id === formData.unitId);
+  const selectedColour = colourOptions.find((c) => c.colourId === formData.colourId)?.colour;
+  const previewName =
+    kind === 'INK'
+      ? generateInkName(
+          selectedLine?.name ?? '',
+          selectedColour?.name,
+          formData.packSize,
+          selectedUnit?.name
+        )
+      : formData.name;
+
+  const filteredLines = useMemo(() => {
+    if (!lineSearch.trim()) return lines;
+    const q = lineSearch.trim().toLowerCase();
+    return lines.filter((l) => l.name.toLowerCase().includes(q));
+  }, [lines, lineSearch]);
+
+  const linesByKind = useMemo(() => {
+    const groups: Record<Kind, LineOption[]> = { INK: [], MACHINE: [], SPARE_PART: [] };
+    for (const l of filteredLines) groups[l.kind].push(l);
+    return groups;
+  }, [filteredLines]);
+
+  const handleLineChange = (newLineId: string) => {
+    const newLine = lines.find((l) => l.id === newLineId);
+    setFormData((prev) => ({
+      ...prev,
+      lineId: newLineId,
+      // Kind-specific fields don't carry over across a line change.
+      name: newLine?.kind === 'INK' ? '' : prev.name,
+      unitId: '',
+      packSize: newLine?.kind === 'INK' ? prev.packSize : '',
+      colourId: '',
+    }));
   };
 
   const validate = (): boolean => {
     const next: Record<string, string> = {};
-    if (!formData.name.trim()) next.name = 'Product name is required.';
-    if (!formData.categoryId) next.categoryId = 'Category is required.';
-    if (!formData.basePrice.trim() || Number(formData.basePrice) < 0) {
+    if (!formData.lineId) next.lineId = 'Product line is required.';
+    if (!formData.unitId) next.unitId = 'Unit is required.';
+    if (kind === 'INK') {
+      if (!formData.packSize.trim() || Number(formData.packSize) <= 0) {
+        next.packSize = 'Enter a valid pack size.';
+      }
+      if (usesColours && !formData.colourId) {
+        next.colourId = 'Colour is required for this line.';
+      }
+    } else if (kind) {
+      if (!formData.name.trim()) next.name = 'Product name is required.';
+    }
+    if (formData.basePrice.trim() && Number(formData.basePrice) < 0) {
       next.basePrice = 'Enter a valid base price.';
     }
     if (!formData.lowerStockLimit.trim() || Number(formData.lowerStockLimit) < 0) {
@@ -140,40 +256,43 @@ export default function ProductsPage() {
       const url = editingId ? `/api/products/${editingId}` : '/api/products';
       const method = editingId ? 'PUT' : 'POST';
 
+      const payload: Record<string, unknown> = {
+        lineId: formData.lineId,
+        unitId: formData.unitId,
+        basePrice: formData.basePrice.trim() ? Number(formData.basePrice) : 0,
+        lowerStockLimit: Number(formData.lowerStockLimit),
+        ...(editingId ? { isActive: formData.isActive } : {}),
+      };
+      if (kind === 'INK') {
+        payload.packSize = Number(formData.packSize);
+        payload.colourId = formData.colourId || undefined;
+      } else {
+        payload.name = formData.name;
+      }
+
       const res = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: formData.name,
-          categoryId: formData.categoryId,
-          basePrice: Number(formData.basePrice),
-          unit: formData.unit,
-          lowerStockLimit: Number(formData.lowerStockLimit),
-          ...(editingId ? { isActive: formData.isActive } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         setIsModalOpen(false);
-        setFormData({
-          name: '',
-          categoryId: '',
-          basePrice: '',
-          unit: 'LTR',
-          lowerStockLimit: '10',
-          isActive: true,
-        });
+        setFormData(emptyFormData);
         setEditingId(null);
+        showSuccessToast(editingId ? 'Product updated' : 'Product created');
         fetchProducts();
       } else {
         const error = await res.json();
         setSubmitError(error.error?.message ?? error.message ?? 'Failed to save product.');
+        showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} product`);
       }
     } catch (error) {
       console.error(`Failed to ${editingId ? 'update' : 'create'} product`, error);
       setSubmitError(`Failed to ${editingId ? 'update' : 'create'} product.`);
+      showErrorToast(error, `Failed to ${editingId ? 'update' : 'create'} product`);
     } finally {
       setIsSubmitting(false);
     }
@@ -195,57 +314,55 @@ export default function ProductsPage() {
       });
 
       if (res.ok) {
+        showSuccessToast('Product deleted');
         fetchProducts();
       } else {
         const error = await res.json();
-        alert(`Error: ${error.message}`);
+        showErrorToast(error, 'Failed to delete product');
         setLoading(false);
       }
     } catch (error) {
       console.error('Failed to delete product', error);
-      alert('Failed to delete product');
+      showErrorToast(error, 'Failed to delete product');
       setLoading(false);
     }
   };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchCategories();
+    fetchLines();
+    fetchUnits();
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [search, categoryId]);
+  }, [search, lineFilterId]);
 
   useEffect(() => {
     // eslint-disable-next-line
     fetchProducts();
-  }, [search, categoryId, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, lineFilterId, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns = useMemo<ColumnDef<Product, unknown>[]>(
     () => [
       {
         id: 'name',
         accessorFn: (p) => p.name,
-        header: 'Name & SKU',
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="font-medium">{row.original.name}</span>
-            <span className="text-on-surface-variant font-mono text-[11px] tracking-wider uppercase">
-              {row.original.sku}
-            </span>
-          </div>
-        ),
+        header: 'Name',
+        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
       },
       {
-        id: 'category',
-        accessorFn: (p) => p.category?.name ?? '',
-        header: 'Category',
+        id: 'line',
+        accessorFn: (p) => p.line?.name ?? '',
+        header: 'Product Line',
         cell: ({ row }) => (
-          <span className="text-on-surface-variant">
-            {row.original.category?.name || 'Uncategorized'}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-on-surface-variant">{row.original.line.name}</span>
+            <span className="text-on-surface-variant/70 font-mono text-[11px] tracking-wider uppercase">
+              {KIND_LABEL[row.original.line.kind]}
+            </span>
+          </div>
         ),
       },
       {
@@ -268,11 +385,11 @@ export default function ProductsPage() {
         accessorFn: (p) => p.currentStock,
         header: 'Stock',
         cell: ({ row }) => {
-          const low = row.original.currentStock < row.original.lowerStockLimit;
+          const low = Number(row.original.currentStock) < Number(row.original.lowerStockLimit);
           return (
             <div className="flex items-center gap-2">
               <span className={low ? 'text-status-error font-mono font-bold' : 'font-mono'}>
-                {row.original.currentStock} {row.original.unit}
+                {row.original.currentStock} {row.original.unit.name}
               </span>
               {low && (
                 <span className="bg-status-error/12 text-status-error rounded px-2 py-0.5 text-[10px] font-bold uppercase">
@@ -338,21 +455,21 @@ export default function ProductsPage() {
       <ListToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search products by name or category..."
+        searchPlaceholder="Search products by name or product line..."
         filters={
           <>
-            <FilterSelect value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+            <FilterSelect value={lineFilterId} onChange={(e) => setLineFilterId(e.target.value)}>
+              <option value="">All Product Lines</option>
+              {lines.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({KIND_LABEL[l.kind]})
                 </option>
               ))}
             </FilterSelect>
             <Button asChild variant="outline">
-              <Link href="/categories">
+              <Link href="/product-lines">
                 <span className="material-symbols-outlined text-[18px]">category</span>
-                Manage categories
+                Manage product lines
               </Link>
             </Button>
           </>
@@ -391,7 +508,7 @@ export default function ProductsPage() {
         }
       />
 
-      {/* Add Product Modal */}
+      {/* Add/Edit Product Modal */}
       {isModalOpen && (
         <div className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
           <div className="animate-in zoom-in-95 border-border bg-surface-container w-full max-w-md rounded-2xl border p-6 shadow-2xl duration-200">
@@ -408,32 +525,89 @@ export default function ProductsPage() {
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <SubmitError>{submitError}</SubmitError>
-              <FormField label="Product Name" required error={errors.name}>
+
+              <FormField label="Product Line" required error={errors.lineId}>
                 <TextInput
-                  placeholder="e.g. Cyan Ink 1Ltr"
-                  value={formData.name}
+                  className="mb-1.5"
+                  placeholder="Filter product lines..."
+                  value={lineSearch}
+                  onChange={(e) => setLineSearch(e.target.value)}
+                />
+                <SelectInput
+                  value={formData.lineId}
+                  invalid={!!errors.lineId}
+                  onChange={(e) => handleLineChange(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Select a product line
+                  </option>
+                  {(['INK', 'MACHINE', 'SPARE_PART'] as Kind[]).map((k) =>
+                    linesByKind[k].length > 0 ? (
+                      <optgroup key={k} label={KIND_LABEL[k]}>
+                        {linesByKind[k].map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null
+                  )}
+                </SelectInput>
+              </FormField>
+
+              <FormField
+                label="Product Name"
+                required={kind !== 'INK'}
+                error={errors.name}
+                htmlFor="product-name"
+              >
+                <TextInput
+                  id="product-name"
+                  placeholder={kind === 'INK' ? 'Auto-generated from line, colour & pack size' : 'e.g. UV Printer XL-1000'}
+                  value={previewName}
+                  readOnly={kind === 'INK'}
+                  disabled={kind === 'INK'}
                   invalid={!!errors.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </FormField>
-              <FormField label="Category" required error={errors.categoryId}>
-                <SelectInput
-                  value={formData.categoryId}
-                  invalid={!!errors.categoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                >
-                  <option value="" disabled>
-                    Select a category
-                  </option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
+
+              {kind === 'INK' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="Pack Size" required error={errors.packSize}>
+                    <TextInput
+                      placeholder="e.g. 1"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={formData.packSize}
+                      invalid={!!errors.packSize}
+                      onChange={(e) => setFormData({ ...formData, packSize: e.target.value })}
+                    />
+                  </FormField>
+                  {usesColours && (
+                    <FormField label="Colour" required error={errors.colourId}>
+                      <SelectInput
+                        value={formData.colourId}
+                        invalid={!!errors.colourId}
+                        onChange={(e) => setFormData({ ...formData, colourId: e.target.value })}
+                      >
+                        <option value="" disabled>
+                          Select a colour
+                        </option>
+                        {colourOptions.map((c) => (
+                          <option key={c.colourId} value={c.colourId}>
+                            {c.colour.name}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    </FormField>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
-                <FormField label="Base Price (₹)" required error={errors.basePrice}>
+                <FormField label="Base Price (₹)" error={errors.basePrice}>
                   <TextInput
                     placeholder="0.00"
                     type="number"
@@ -444,15 +618,21 @@ export default function ProductsPage() {
                     onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
                   />
                 </FormField>
-                <FormField label="Unit">
+                <FormField label="Unit" required error={errors.unitId}>
                   <SelectInput
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                    value={formData.unitId}
+                    invalid={!!errors.unitId}
+                    disabled={!kind}
+                    onChange={(e) => setFormData({ ...formData, unitId: e.target.value })}
                   >
-                    <option value="LTR">LTR (Liters)</option>
-                    <option value="KG">KG (Kilograms)</option>
-                    <option value="PCS">PCS (Pieces)</option>
-                    <option value="MTR">MTR (Meters)</option>
+                    <option value="" disabled>
+                      {kind ? 'Select a unit' : 'Select a product line first'}
+                    </option>
+                    {unitsForKind.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
                   </SelectInput>
                 </FormField>
               </div>

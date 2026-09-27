@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RegistrationMark } from '@/components/ui/RegistrationMark';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type InquiryStatus = 'NEW' | 'CONTACTED' | 'CONVERTED' | 'CLOSED';
 
@@ -79,6 +80,7 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
     } catch (err) {
       console.error('Failed to load inquiry', err);
       setError('Failed to load inquiry.');
+      showErrorToast(err, 'Failed to load inquiry');
     } finally {
       setLoading(false);
     }
@@ -99,13 +101,14 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error?.message || 'Failed to update status');
+        showErrorToast(data, 'Failed to update status');
       } else {
         setInquiry(data.data);
+        showSuccessToast('Inquiry status updated');
       }
     } catch (err) {
       console.error('Failed to update status', err);
-      alert('An unexpected error occurred.');
+      showErrorToast(err, 'Failed to update status');
     } finally {
       setUpdatingStatus(false);
     }
@@ -122,6 +125,7 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
     } catch (err) {
       console.error('Failed to check existing customer match', err);
       setExistingMatch(null);
+      showErrorToast(err, 'Failed to check for an existing customer match');
     }
   };
 
@@ -141,14 +145,17 @@ export default function InquiryDetailPage({ params }: { params: Promise<{ id: st
       const data = await res.json();
       if (!res.ok) {
         setConvertError(data.error?.message || 'Failed to convert inquiry');
+        showErrorToast(data, 'Failed to convert inquiry');
         return;
       }
       setIsConvertModalOpen(false);
+      showSuccessToast('Inquiry converted to customer');
       const customerId = data.data.customer.id;
       router.push(`/customers/${customerId}`);
     } catch (err) {
       console.error('Failed to convert inquiry', err);
       setConvertError('An unexpected error occurred.');
+      showErrorToast(err, 'Failed to convert inquiry');
     } finally {
       setConverting(false);
     }

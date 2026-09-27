@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type RecordPaymentModalProps = {
   isOpen: boolean;
@@ -43,15 +44,16 @@ export default function RecordPaymentModal({
       });
 
       if (res.ok) {
+        showSuccessToast('Payment recorded');
         onSuccess();
         onClose();
       } else {
         const err = await res.json();
-        alert(`Error: ${err.message}`);
+        showErrorToast(err, 'Failed to record payment');
       }
     } catch (error) {
       console.error('Failed to record payment', error);
-      alert('Failed to record payment');
+      showErrorToast(error, 'Failed to record payment');
     } finally {
       setIsSubmitting(false);
     }

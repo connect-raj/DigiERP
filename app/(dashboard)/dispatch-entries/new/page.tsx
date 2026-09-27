@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type Customer = {
   id: string;
@@ -13,7 +14,18 @@ type Customer = {
   gstin?: string | null;
 };
 
-type Category = {
+type ProductLine = {
+  id: string;
+  name: string;
+  kind: string;
+};
+
+type Unit = {
+  id: string;
+  name: string;
+};
+
+type Colour = {
   id: string;
   name: string;
 };
@@ -23,7 +35,10 @@ type Product = {
   name: string;
   basePrice: string | number;
   currentStock: string | number;
-  category: Category;
+  packSize?: string | number | null;
+  line: ProductLine;
+  unit: Unit;
+  colour?: Colour | null;
 };
 
 type LineItem = {
@@ -84,6 +99,7 @@ export default function NewDispatchEntryPage() {
         if (prodData.data) setProducts(prodData.data);
       } catch (error) {
         console.error('Failed to load initial form data', error);
+        showErrorToast(error, 'Failed to load form data');
       } finally {
         setLoading(false);
       }
@@ -126,6 +142,7 @@ export default function NewDispatchEntryPage() {
         }
       } catch (error) {
         console.error('Failed to fetch customer specific prices', error);
+        showErrorToast(error, 'Failed to fetch customer prices');
       }
     };
 
@@ -185,16 +202,25 @@ export default function NewDispatchEntryPage() {
     );
   };
 
-  // Group products by category
+  // Group products by product line
   const groupedProducts = useMemo(() => {
     const groups: Record<string, Product[]> = {};
     products.forEach((p) => {
-      const catName = p.category?.name || 'Uncategorized';
-      if (!groups[catName]) groups[catName] = [];
-      groups[catName].push(p);
+      const lineName = p.line?.name || 'Uncategorized';
+      if (!groups[lineName]) groups[lineName] = [];
+      groups[lineName].push(p);
     });
     return groups;
   }, [products]);
+
+  // Human-readable attributes (unit, pack size, colour) for the product picker
+  const describeProduct = (p: Product) => {
+    const parts: string[] = [];
+    if (p.packSize) parts.push(`${p.packSize} ${p.unit?.name ?? ''}`.trim());
+    else if (p.unit?.name) parts.push(p.unit.name);
+    if (p.colour?.name) parts.push(p.colour.name);
+    return parts.length ? parts.join(' · ') : null;
+  };
 
   // Computations
   const computedItems = useMemo(() => {
@@ -261,8 +287,11 @@ export default function NewDispatchEntryPage() {
       if (!res.ok) {
         const errorMsg = result.error?.message || 'Failed to record dispatch entry';
         setFormError(errorMsg);
+        showErrorToast(result, 'Failed to record dispatch entry');
         return;
       }
+
+      showSuccessToast('Dispatch entry recorded');
 
       // The dispatch is recorded regardless; the server returns a non-blocking
       // credit-limit warning when applicable. Surface it, then let the user
@@ -282,6 +311,7 @@ export default function NewDispatchEntryPage() {
     } catch (error) {
       console.error('Submission failed', error);
       setFormError('An unexpected error occurred during submission.');
+      showErrorToast(error, 'An unexpected error occurred during submission.');
     } finally {
       setSubmitting(false);
     }
@@ -525,17 +555,21 @@ export default function NewDispatchEntryPage() {
                             className="bg-surface-container-low border-outline-variant text-body-md text-on-surface focus:border-secondary w-full appearance-none rounded-lg border-[0.5px] py-2 pr-10 pl-3 outline-none"
                           >
                             <option value="">Select Product...</option>
-                            {Object.entries(groupedProducts).map(([category, prods]) => (
+                            {Object.entries(groupedProducts).map(([lineName, prods]) => (
                               <optgroup
-                                key={category}
-                                label={category}
+                                key={lineName}
+                                label={lineName}
                                 className="bg-surface-container-low text-primary"
                               >
-                                {prods.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} ({category})
-                                  </option>
-                                ))}
+                                {prods.map((p) => {
+                                  const attrs = describeProduct(p);
+                                  return (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name}
+                                      {attrs ? ` (${attrs})` : ''}
+                                    </option>
+                                  );
+                                })}
                               </optgroup>
                             ))}
                           </select>
@@ -545,10 +579,15 @@ export default function NewDispatchEntryPage() {
                         </div>
                         {item.productId && (
                           <span className="text-on-surface-variant mt-1 block text-[11px]">
-                            Category:{' '}
+                            Line:{' '}
                             <span className="text-secondary font-medium">
-                              {products.find((p) => p.id === item.productId)?.category.name}
+                              {products.find((p) => p.id === item.productId)?.line.name}
                             </span>
+                            {(() => {
+                              const prod = products.find((p) => p.id === item.productId);
+                              const attrs = prod ? describeProduct(prod) : null;
+                              return attrs ? ` · ${attrs}` : null;
+                            })()}
                           </span>
                         )}
                       </td>

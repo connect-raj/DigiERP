@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { showSuccessToast, showErrorToast } from '@/lib/toast';
 
 type CustomerOption = { id: string; firmName: string };
 
@@ -78,7 +79,10 @@ export default function RecordPaymentModal({
       .then((data) => {
         if (data.data) setCustomers(data.data);
       })
-      .catch((error) => console.error('Failed to fetch customers', error));
+      .catch((error) => {
+        console.error('Failed to fetch customers', error);
+        showErrorToast(error, 'Failed to load customers');
+      });
   }, [isOpen, lockedCustomerId]);
 
   // When a customer is chosen, load their open invoices + billing mode to drive the allocation UI.
@@ -97,7 +101,10 @@ export default function RecordPaymentModal({
         setShowInvoices(bm === 'BILL_WISE');
         setAllocations({});
       })
-      .catch((error) => console.error('Failed to load open invoices', error));
+      .catch((error) => {
+        console.error('Failed to load open invoices', error);
+        showErrorToast(error, 'Failed to load open invoices');
+      });
     return () => {
       cancelled = true;
     };
@@ -166,14 +173,17 @@ export default function RecordPaymentModal({
       const result = await res.json();
       if (!res.ok) {
         setFormError(result.error?.message || 'Failed to record payment');
+        showErrorToast(result, 'Failed to record payment');
         return;
       }
 
+      showSuccessToast('Payment recorded');
       onSuccess();
       onClose();
     } catch (error) {
       console.error('Failed to record payment', error);
       setFormError('An unexpected error occurred while recording the payment.');
+      showErrorToast(error, 'An unexpected error occurred while recording the payment.');
     } finally {
       setIsSubmitting(false);
     }

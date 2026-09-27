@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import { Toaster } from 'sonner';
 import PWARegister from '@/components/PWARegister';
 import './globals.css';
 
@@ -61,6 +62,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <PWARegister />
         {children}
+        <Toaster theme="dark" richColors position="top-right" />
       </body>
     </html>
   );
