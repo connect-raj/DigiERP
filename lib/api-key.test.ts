@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { hashApiKey, generateRawApiKey, verifyIngestionApiKey, verifyPublicApiKey } from './api-key';
+import {
+  hashApiKey,
+  generateRawApiKey,
+  verifyIngestionApiKey,
+  verifyPublicApiKey,
+  API_KEY_PREFIXES,
+} from './api-key';
 import prisma from '@/lib/prisma';
 import { UnauthorizedError } from '@/lib/errors';
 
@@ -25,10 +31,15 @@ describe('hashApiKey', () => {
 });
 
 describe('generateRawApiKey', () => {
-  it('generates a high-entropy hex string', () => {
-    const key = generateRawApiKey();
-    expect(key).toMatch(/^[0-9a-f]{64}$/);
-    expect(generateRawApiKey()).not.toBe(key);
+  it('generates a prefixed, high-entropy key', () => {
+    const key = generateRawApiKey(API_KEY_PREFIXES.public);
+    expect(key).toMatch(/^sk-pub-[A-Za-z0-9_-]{43}$/);
+    expect(generateRawApiKey(API_KEY_PREFIXES.public)).not.toBe(key);
+  });
+
+  it('tags the key with the given prefix', () => {
+    expect(generateRawApiKey(API_KEY_PREFIXES.ingestion)).toMatch(/^sk-ing-/);
+    expect(generateRawApiKey(API_KEY_PREFIXES.public)).toMatch(/^sk-pub-/);
   });
 });
 

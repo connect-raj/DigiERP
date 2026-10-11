@@ -3,7 +3,7 @@ import {
   CreateIngestionApiKeyInput,
   UpdateIngestionApiKeyInput,
 } from '@/validations/ingestion-api-key';
-import { hashApiKey, generateRawApiKey } from '@/lib/api-key';
+import { hashApiKey, generateRawApiKey, API_KEY_PREFIXES } from '@/lib/api-key';
 
 /** keyHash is a credential-derived value — never select it back out for
  * admin-facing reads/writes. Only lib/api-key.ts's own lookup-by-hash query
@@ -28,7 +28,7 @@ export class IngestionApiKeyRepository {
   /** Generates a new raw key, stores only its hash, and returns the raw key
    * once — it is never persisted or retrievable again after this call. */
   async create(data: CreateIngestionApiKeyInput) {
-    const rawKey = generateRawApiKey();
+    const rawKey = generateRawApiKey(API_KEY_PREFIXES.ingestion);
     const apiKey = await prisma.ingestionApiKey.create({
       data: {
         label: data.label,

@@ -32,7 +32,7 @@ describe('IngestionApiKeyRepository', () => {
         source: 'EXPO',
       });
 
-      expect(result.rawKey).toMatch(/^[0-9a-f]{64}$/);
+      expect(result.rawKey).toMatch(/^sk-ing-[A-Za-z0-9_-]{43}$/);
       expect(prisma.ingestionApiKey.create).toHaveBeenCalledWith({
         data: {
           label: 'Expo microsite',

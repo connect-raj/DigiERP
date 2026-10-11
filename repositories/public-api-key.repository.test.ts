@@ -29,7 +29,7 @@ describe('PublicApiKeyRepository', () => {
 
       const result = await publicApiKeyRepository.create({ label: 'Marketing site' });
 
-      expect(result.rawKey).toMatch(/^[0-9a-f]{64}$/);
+      expect(result.rawKey).toMatch(/^sk-pub-[A-Za-z0-9_-]{43}$/);
       expect(prisma.publicApiKey.create).toHaveBeenCalledWith({
         data: {
           label: 'Marketing site',
