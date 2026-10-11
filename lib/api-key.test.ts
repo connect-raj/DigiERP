@@ -1,11 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { hashApiKey, generateRawApiKey, verifyIngestionApiKey } from './api-key';
+import {
+  hashApiKey,
+  generateRawApiKey,
+  verifyIngestionApiKey,
+  verifyPublicApiKey,
+  API_KEY_PREFIXES,
+} from './api-key';
 import prisma from '@/lib/prisma';
 import { UnauthorizedError } from '@/lib/errors';
 
 vi.mock('@/lib/prisma', () => ({
   default: {
     ingestionApiKey: {
+      findUnique: vi.fn(),
+    },
+    publicApiKey: {
       findUnique: vi.fn(),
     },
   },
@@ -22,10 +31,15 @@ describe('hashApiKey', () => {
 });
 
 describe('generateRawApiKey', () => {
-  it('generates a high-entropy hex string', () => {
-    const key = generateRawApiKey();
-    expect(key).toMatch(/^[0-9a-f]{64}$/);
-    expect(generateRawApiKey()).not.toBe(key);
+  it('generates a prefixed, high-entropy key', () => {
+    const key = generateRawApiKey(API_KEY_PREFIXES.public);
+    expect(key).toMatch(/^sk-pub-[A-Za-z0-9_-]{43}$/);
+    expect(generateRawApiKey(API_KEY_PREFIXES.public)).not.toBe(key);
+  });
+
+  it('tags the key with the given prefix', () => {
+    expect(generateRawApiKey(API_KEY_PREFIXES.ingestion)).toMatch(/^sk-ing-/);
+    expect(generateRawApiKey(API_KEY_PREFIXES.public)).toMatch(/^sk-pub-/);
   });
 });
 
@@ -73,3 +87,47 @@ describe('verifyIngestionApiKey', () => {
     });
   });
 });
+
+describe('verifyPublicApiKey', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('throws Unauthorized when no key is provided', async () => {
+    await expect(verifyPublicApiKey(null)).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('throws Unauthorized when the key hash matches no record', async () => {
+    vi.mocked(prisma.publicApiKey.findUnique).mockResolvedValue(null);
+    await expect(verifyPublicApiKey('bad-key')).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('throws Unauthorized when the matched key is inactive', async () => {
+    vi.mocked(prisma.publicApiKey.findUnique).mockResolvedValue({
+      id: 'key-1',
+      label: 'Marketing site',
+      keyHash: hashApiKey('revoked-key'),
+      active: false,
+      createdAt: new Date(),
+    } as never);
+    await expect(verifyPublicApiKey('revoked-key')).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('returns the apiKeyId for a valid, active key, looked up by hash', async () => {
+    vi.mocked(prisma.publicApiKey.findUnique).mockResolvedValue({
+      id: 'key-1',
+      label: 'Marketing site',
+      keyHash: hashApiKey('good-key'),
+      active: true,
+      createdAt: new Date(),
+    } as never);
+
+    const result = await verifyPublicApiKey('good-key');
+
+    expect(result).toEqual({ apiKeyId: 'key-1' });
+    expect(prisma.publicApiKey.findUnique).toHaveBeenCalledWith({
+      where: { keyHash: hashApiKey('good-key') },
+    });
+  });
+});
+

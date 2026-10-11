@@ -201,6 +201,7 @@ model ProductLine {
   heads                LineHead[]
   products             Product[]
   customerInvoiceNames CustomerLineInvoiceName[]
+  galleryItems         GalleryItem[]
 
   @@index([brandId])
   @@index([technologyId])
@@ -623,4 +624,63 @@ model IngestionApiKey {
   keyHash   String        @unique
   active    Boolean       @default(true)
   createdAt DateTime      @default(now())
+}
+
+// --- Website CMS: gallery + media library, feeding the public marketing site ---
+
+model GalleryApplicationType {
+  id           String        @id @default(uuid())
+  name         String        @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  galleryItems GalleryItem[]
+}
+
+/** One uploaded asset (image, video, or PDF), stored in Cloudinary. `resourceType`
+ * is Cloudinary's own image|video|raw classification — needed because deleting
+ * or transforming an asset via their API requires knowing which bucket it's in. */
+model MediaAsset {
+  id           String   @id @default(uuid())
+  publicId     String   @unique
+  resourceType String
+  url          String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  altText      String?
+  createdAt    DateTime @default(now())
+
+  galleryItems GalleryItem[]
+}
+
+model GalleryItem {
+  id                   String   @id @default(uuid())
+  title                String
+  applicationTypeId    String
+  imageId              String
+  relatedProductLineId String?
+  displayOrder         Int      @default(0)
+  isPublished          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  applicationType    GalleryApplicationType @relation(fields: [applicationTypeId], references: [id], onDelete: Restrict)
+  image              MediaAsset             @relation(fields: [imageId], references: [id], onDelete: Restrict)
+  relatedProductLine ProductLine?           @relation(fields: [relatedProductLineId], references: [id], onDelete: SetNull)
+
+  @@index([relatedProductLineId])
+  @@index([isPublished])
+  @@index([displayOrder])
+}
+
+/** Read-scoped key for the public marketing-site API (app/api/public/*, CMS
+ * routes). Deliberately separate from IngestionApiKey: that model's `source`
+ * field is typed to InquirySource and doesn't fit a read key. */
+model PublicApiKey {
+  id        String   @id @default(uuid())
+  label     String
+  keyHash   String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }

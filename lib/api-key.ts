@@ -11,9 +11,19 @@ export function hashApiKey(rawKey: string): string {
   return crypto.createHash('sha256').update(rawKey).digest('hex');
 }
 
-/** Generates a new random raw API key (returned to the caller exactly once). */
-export function generateRawApiKey(): string {
-  return crypto.randomBytes(32).toString('hex');
+/** Key-type prefixes, OpenAI/Anthropic-style (`sk-ing-...`, `sk-pub-...`) — lets
+ * the key's type be read at a glance (logs, error messages, secret scanners)
+ * without a DB lookup. */
+export const API_KEY_PREFIXES = {
+  ingestion: 'sk-ing',
+  public: 'sk-pub',
+} as const;
+
+/** Generates a new random raw API key (returned to the caller exactly once),
+ * as `<prefix>-<secret>` where secret is 32 random bytes, base64url-encoded. */
+export function generateRawApiKey(prefix: string): string {
+  const secret = crypto.randomBytes(32).toString('base64url');
+  return `${prefix}-${secret}`;
 }
 
 /**
@@ -39,4 +49,26 @@ export async function verifyIngestionApiKey(
   }
 
   return { source: apiKey.source, apiKeyId: apiKey.id };
+}
+
+/**
+ * Verifies a public (read-scoped) API key for the marketing-site-facing
+ * routes under app/api/public/*. Separate model from IngestionApiKey (see
+ * PublicApiKey in schema.prisma) — this is a read credential, not scoped to
+ * an inquiry source.
+ */
+export async function verifyPublicApiKey(rawKey: string | null): Promise<{ apiKeyId: string }> {
+  if (!rawKey) {
+    throw new UnauthorizedError('Unauthorized: Missing API key');
+  }
+
+  const apiKey = await prisma.publicApiKey.findUnique({
+    where: { keyHash: hashApiKey(rawKey) },
+  });
+
+  if (!apiKey || !apiKey.active) {
+    throw new UnauthorizedError('Unauthorized: Invalid or inactive API key');
+  }
+
+  return { apiKeyId: apiKey.id };
 }

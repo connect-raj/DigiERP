@@ -214,6 +214,20 @@ export default function SettingsPage() {
           Manage Ingestion Keys
         </a>
       </div>
+
+      <div className="mt-6 max-w-2xl rounded-xl border-[0.5px] border-[#333] bg-[#1c1c1c] p-6">
+        <h2 className="font-display text-lg font-semibold tracking-tight">Public API Keys</h2>
+        <p className="text-on-surface-variant mt-1 text-[13px]">
+          Read-only API keys for the marketing website (gallery, and anything else exposed under
+          /api/public/*).
+        </p>
+        <a
+          href="/settings/public-api-keys"
+          className="text-primary mt-4 inline-block rounded-lg border-[0.5px] border-[#444] bg-[#2a2a2a] px-5 py-2 text-[13px] font-medium transition-all hover:bg-[#333]"
+        >
+          Manage Public API Keys
+        </a>
+      </div>
     </div>
   );
 }
